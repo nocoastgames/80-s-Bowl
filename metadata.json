@@ -1,0 +1,6 @@
+{
+  "name": "Switch Strike Bowling",
+  "description": "A single-switch accessible 3D bowling game with tournament support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
