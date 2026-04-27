@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-dark: #0a0a0f;
+  --color-panel: rgba(20, 20, 30, 0.9);
+  --color-accent: #00f2ff;
+  --color-warn: #ffff00;
+  --color-header-bg: #1a1a2e;
+  --font-sans: 'Helvetica Neue', Arial, sans-serif;
+}
+
+body {
+  background-color: var(--color-bg-dark);
+  color: #ffffff;
+  background-image: 
+    linear-gradient(45deg, #ff00ff 25%, transparent 25%, transparent 75%, #00f2ff 75%, #00f2ff), 
+    linear-gradient(45deg, #ff00ff 25%, transparent 25%, transparent 75%, #00f2ff 75%, #00f2ff);
+  background-size: 100px 100px;
+  background-position: 0 0, 50px 50px;
+  background-blend-mode: overlay;
+  animation: bgScroll 20s linear infinite;
+}
+
+@keyframes bgScroll {
+  from { background-position: 0 0, 50px 50px; }
+  to { background-position: 100px 100px, 150px 150px; }
+}
