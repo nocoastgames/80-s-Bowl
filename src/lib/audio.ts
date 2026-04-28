@@ -7,12 +7,11 @@ class RetroAudioEngine {
   bgmAudio: HTMLAudioElement | null = null;
   sfxVolume = 0.8;
 
-  // Free SomaFM streams for a "radio style" experience
+  // Free web radio streams for a more upbeat/80s style experience
   streams = [
-    'https://ice1.somafm.com/groovesalad-128-mp3',
-    'https://ice1.somafm.com/secretagent-128-mp3',
-    'https://ice1.somafm.com/defcon-128-mp3',
-    'https://ice1.somafm.com/fluid-128-mp3'
+    'https://ice1.somafm.com/u80s-128-mp3',     // SomaFM Underground 80s (Synthpop, New Wave)
+    'https://ice1.somafm.com/poptron-128-mp3',  // SomaFM PopTron (Upbeat electro-pop)
+    'https://radio.plaza.one/mp3'               // Nightwave Plaza (Vaporwave / 80s aesthetic)
   ];
 
   init() {
