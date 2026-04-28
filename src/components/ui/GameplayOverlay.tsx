@@ -1,11 +1,68 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore, calculateTotalScore } from '../../store';
 import { useSingleSwitch } from '../../hooks/useSingleSwitch';
-import { motion } from 'motion/react';
-import { audioEngine } from '../../lib/audio';
+import { useCurrentSong } from '../../hooks/useCurrentSong';
+import { motion, useAnimationFrame } from 'motion/react';
+import { audioEngine, RADIO_STATIONS } from '../../lib/audio';
+
+const BARS = 32;
+const ROWS = 6;
+
+const DotMatrixEQ = ({ active }: { active: boolean }) => {
+  const [eqData, setEqData] = useState<number[]>(Array(BARS).fill(0));
+
+  useAnimationFrame(() => {
+    if (!active) {
+      setEqData(Array(BARS).fill(0));
+      return;
+    }
+    const data = audioEngine.getEQData();
+    if (data && data.some((v: number) => v > 0)) {
+      const numBins = data.length;
+      const binsPerBar = Math.max(1, Math.floor(numBins / BARS));
+      const newLevels = [];
+      for (let i = 0; i < BARS; i++) {
+        let sum = 0;
+        let count = 0;
+        for (let j = 0; j < binsPerBar; j++) {
+           if (i * binsPerBar + j < numBins) {
+              sum += data[i * binsPerBar + j];
+              count++;
+           }
+        }
+        let avg = count > 0 ? sum / count : 0;
+        newLevels.push(Math.min(1.0, avg / 255) * 1.5);
+      }
+      setEqData(newLevels);
+    } else {
+      setEqData(prev => prev.map(() => Math.random() * 0.8));
+    }
+  });
+
+  return (
+    <div className="absolute bottom-1 left-2 right-2 flex items-end justify-between opacity-50 mix-blend-screen pointer-events-none z-0">
+      {eqData.map((val, i) => {
+         const activeDots = Math.round(val * ROWS);
+         return (
+            <div key={i} className="flex flex-col-reverse justify-start gap-[2px] h-[36px] w-[8px]">
+               {Array.from({ length: ROWS }).map((_, r) => {
+                 let color = 'bg-[#00f2ff]/10';
+                 if (r < activeDots) {
+                    if (r >= Math.floor(ROWS * 0.8)) color = 'bg-red-500 shadow-[0_0_5px_red]';
+                    else if (r >= Math.floor(ROWS * 0.5)) color = 'bg-yellow-400 shadow-[0_0_5px_yellow]';
+                    else color = 'bg-[#00ff00] shadow-[0_0_5px_lime]';
+                 }
+                 return <div key={r} className={`w-full h-[4px] rounded-[1px] ${color}`} />
+               })}
+            </div>
+         );
+      })}
+    </div>
+  );
+};
 
 export function GameplayOverlay() {
-  const { playState, setPlayState, aimAngle, setAimAngle, powerLevel, setPowerLevel, sweepSpeed, gameMode, currentFrame, totalFrames, playerFrames, players, currentPlayerIndex, teacherAdvancePending, nextPlayer, isPaused } = useStore();
+  const { playState, setPlayState, aimAngle, setAimAngle, powerLevel, setPowerLevel, sweepSpeed, gameMode, currentFrame, totalFrames, playerFrames, players, currentPlayerIndex, teacherAdvancePending, nextPlayer, isPaused, currentStationIndex } = useStore();
   
   const [localPos, setLocalPos] = useState(0);
   const [localAim, setLocalAim] = useState(0);
@@ -114,13 +171,26 @@ export function GameplayOverlay() {
     }
   }, (playState === 'spin' || playState === 'aiming' || playState === 'power') && !teacherAdvancePending && !isPaused);
 
-  if (playState === 'idle' && !teacherAdvancePending) return null;
+  const stationName = currentStationIndex === -1 ? 'OFF' : RADIO_STATIONS[currentStationIndex]?.name || 'OFF';
+  const isAudioActive = !isPaused && currentStationIndex !== -1 && audioEngine.isPlayingBgm;
+  const songText = useCurrentSong(currentStationIndex);
+
+  const [eqOpacity, setEqOpacity] = useState(1);
+  const opacityTimeoutRef = useRef<number>();
+
+  useEffect(() => {
+    setEqOpacity(1);
+    if (opacityTimeoutRef.current) clearTimeout(opacityTimeoutRef.current);
+    opacityTimeoutRef.current = window.setTimeout(() => {
+       setEqOpacity(0.5);
+    }, 4000);
+  }, [currentStationIndex, songText]);
 
   return (
-    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between" onClick={() => audioEngine.playBGM()}>
+    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between" onClick={() => audioEngine.playBGM(currentStationIndex)}>
       {/* Top Bar */}
-      <header className="h-[80px] bg-gradient-to-b from-header-bg to-transparent flex justify-between items-center px-10 z-10">
-        <div className="flex gap-5">
+      <header className="h-[80px] bg-gradient-to-b from-header-bg to-transparent flex justify-between items-center px-10 z-10 w-full">
+        <div className="flex gap-5 flex-1">
           <div className="bg-panel border-l-4 border-accent px-5 py-2.5 rounded">
             <div className="text-[12px] uppercase tracking-[1px] text-accent">Current Player</div>
             <div className="text-[24px] font-bold">{currentPlayer?.name || 'Player'}</div>
@@ -134,11 +204,48 @@ export function GameplayOverlay() {
             <div className="text-[24px] font-bold">{currentScore}</div>
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-[12px] uppercase tracking-[1px] text-accent">Current Speed</div>
-          <div className="text-[18px] text-[#00ff00]">
-            {sweepSpeed === 0.5 ? 'Slow (0.5x)' : sweepSpeed === 1.0 ? 'Normal (1.0x)' : 'Fast (2.0x)'}
+
+        {/* Center Digital EQ */}
+        <div 
+          className="flex-none flex flex-col items-center justify-center bg-black/80 border-2 border-accent/40 rounded-lg px-2 py-1 w-[380px] h-[60px] overflow-hidden relative shadow-[inset_0_0_15px_rgba(0,242,255,0.2)] transition-opacity duration-1000"
+          style={{ opacity: eqOpacity }}
+        >
+          {/* Scanline overlay for that retro feel */}
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.2)_50%)] bg-[length:100%_4px] z-20 pointer-events-none" />
+
+          {/* Title */}
+          <div className="absolute top-1 left-2 text-[10px] font-bold uppercase text-accent tracking-[2px] z-10 bg-black/60 px-1 rounded shadow-[0_0_5px_currentColor]">FM [{currentStationIndex === -1 ? '0' : currentStationIndex + 1}]</div>
+          
+          <DotMatrixEQ active={isAudioActive} />
+          
+          <div className="flex items-center w-full h-full z-10 mt-[14px] [mask-image:linear-gradient(to_right,transparent,black_10%,black_80%,transparent)]">
+             {currentStationIndex !== -1 ? (
+               <motion.div 
+                 className="whitespace-nowrap text-[26px] font-digital text-[#00f2ff] tracking-[3px] drop-shadow-[0_0_5px_rgba(0,242,255,0.8)]"
+                 animate={{ x: ['100%', '-100%'] }}
+                 transition={{ repeat: Infinity, duration: 15, ease: "linear" }}
+               >
+                 {stationName.toUpperCase()} {songText ? `// ${songText.toUpperCase()}` : ''}
+               </motion.div>
+             ) : (
+               <div className="text-[26px] font-digital text-red-500 tracking-[3px] w-full text-center drop-shadow-[0_0_5px_rgba(255,0,0,0.8)]">SYSTEM OFFLINE</div>
+             )}
           </div>
+        </div>
+
+        <div className="flex-1 text-right flex justify-end items-center gap-6 pointer-events-auto">
+          <div className="text-right">
+            <div className="text-[12px] uppercase tracking-[1px] text-accent">Current Speed</div>
+            <div className="text-[18px] text-[#00ff00]">
+              {sweepSpeed === 0.5 ? 'Slow (0.5x)' : sweepSpeed === 0.75 ? 'Normal (0.75x)' : 'Fast (1.0x)'}
+            </div>
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); useStore.getState().setPaused(true); }}
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/30 rounded text-sm uppercase tracking-wider transition-colors pointer-events-auto"
+          >
+            Menu (Esc)
+          </button>
         </div>
       </header>
 
@@ -193,6 +300,7 @@ export function GameplayOverlay() {
         <div className="text-center">
           <div className="text-[42px] font-[800] text-warn uppercase tracking-[2px] drop-shadow-[0_0_20px_rgba(255,255,0,0.4)]">
             {teacherAdvancePending && "Waiting for Teacher..."}
+            {!teacherAdvancePending && playState === 'idle' && "Resetting..."}
             {!teacherAdvancePending && playState === 'spin' && "Press Switch to Lock Spin"}
             {!teacherAdvancePending && playState === 'aiming' && "Press Switch to Lock Aim"}
             {!teacherAdvancePending && playState === 'power' && "Press Switch for Power"}

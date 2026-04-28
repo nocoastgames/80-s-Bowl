@@ -141,7 +141,7 @@ export const useStore = create<BowlingStore>((set, get) => ({
   teacherAdvancePending: false,
   setTeacherAdvancePending: (pending) => set({ teacherAdvancePending: pending }),
 
-  sweepSpeed: 1.0,
+  sweepSpeed: 0.75,
   setSweepSpeed: (speed) => set({ sweepSpeed: speed }),
 
   playState: 'idle',

@@ -1,13 +1,13 @@
 export const RADIO_STATIONS = [
-  { name: 'Underground 80s', url: 'https://ice1.somafm.com/u80s-128-mp3' },
-  { name: 'PopTron', url: 'https://ice1.somafm.com/poptron-128-mp3' },
-  { name: 'Groove Salad', url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
-  { name: 'Secret Agent', url: 'https://ice1.somafm.com/secretagent-128-mp3' },
-  { name: 'DEF CON Radio', url: 'https://ice1.somafm.com/defcon-128-mp3' },
-  { name: 'Space Station', url: 'https://ice1.somafm.com/spacestation-128-mp3' },
-  { name: 'Fluid', url: 'https://ice1.somafm.com/fluid-128-mp3' },
-  { name: 'Drone Zone', url: 'https://ice1.somafm.com/dronezone-128-mp3' },
-  { name: 'Lush', url: 'https://ice1.somafm.com/lush-128-mp3' }
+  { id: 'u80s', name: 'Underground 80s', url: 'https://ice1.somafm.com/u80s-128-mp3' },
+  { id: 'poptron', name: 'PopTron', url: 'https://ice1.somafm.com/poptron-128-mp3' },
+  { id: 'groovesalad', name: 'Groove Salad', url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
+  { id: 'secretagent', name: 'Secret Agent', url: 'https://ice1.somafm.com/secretagent-128-mp3' },
+  { id: 'defcon', name: 'DEF CON Radio', url: 'https://ice1.somafm.com/defcon-128-mp3' },
+  { id: 'spacestation', name: 'Space Station', url: 'https://ice1.somafm.com/spacestation-128-mp3' },
+  { id: 'fluid', name: 'Fluid', url: 'https://ice1.somafm.com/fluid-128-mp3' },
+  { id: 'dronezone', name: 'Drone Zone', url: 'https://ice1.somafm.com/dronezone-128-mp3' },
+  { id: 'lush', name: 'Lush', url: 'https://ice1.somafm.com/lush-128-mp3' }
 ];
 
 class RetroAudioEngine {
@@ -19,6 +19,10 @@ class RetroAudioEngine {
   bgmAudio: HTMLAudioElement | null = null;
   sfxVolume = 0.8;
 
+  analyser: AnalyserNode | null = null;
+  bgmSource: MediaElementAudioSourceNode | null = null;
+  freqData: Uint8Array | null = null;
+
   stations = RADIO_STATIONS;
 
   init() {
@@ -28,6 +32,14 @@ class RetroAudioEngine {
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+  }
+
+  getEQData() {
+    if (this.analyser && this.freqData && this.isPlayingBgm) {
+      this.analyser.getByteFrequencyData(this.freqData);
+      return Array.from(this.freqData);
+    }
+    return null;
   }
 
   setBgmVolume(vol: number) {
@@ -41,7 +53,12 @@ class RetroAudioEngine {
   }
 
   playBGM(stationIndex: number = 0) {
-    if (this.isPlayingBgm && this.bgmAudio?.src === this.stations[stationIndex].url) return;
+    if (stationIndex === -1) {
+      this.stopBGM();
+      return;
+    }
+    
+    if (this.isPlayingBgm && this.bgmAudio?.src === this.stations[stationIndex]?.url) return;
     
     // Changing station or initiating
     this.isPlayingBgm = true;
@@ -52,14 +69,34 @@ class RetroAudioEngine {
       this.bgmAudio.loop = true;
       // Default initial volume before store overrides
       this.bgmAudio.volume = 0.5; 
+      
+      this.init(); // ensure ctx exists
+      if (this.ctx) {
+        if (!this.analyser) {
+          this.analyser = this.ctx.createAnalyser();
+          this.analyser.fftSize = 64; // 32 bins
+          this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+        }
+        if (!this.bgmSource) {
+          try {
+            this.bgmSource = this.ctx.createMediaElementSource(this.bgmAudio);
+            this.bgmSource.connect(this.analyser);
+            this.analyser.connect(this.ctx.destination);
+          } catch(e) {
+            console.warn("Could not create audio node:", e);
+          }
+        }
+      }
     }
     
-    this.bgmAudio.src = this.stations[stationIndex].url;
-    
-    this.bgmAudio.play().catch(e => {
-        console.warn("BGM play failed", e);
-        this.isPlayingBgm = false;
-    });
+    if (this.stations[stationIndex]) {
+      this.bgmAudio.src = this.stations[stationIndex].url;
+      
+      this.bgmAudio.play().catch(e => {
+          console.warn("BGM play failed", e);
+          this.isPlayingBgm = false;
+      });
+    }
   }
 
   stopBGM() {

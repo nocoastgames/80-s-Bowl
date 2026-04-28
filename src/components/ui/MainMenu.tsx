@@ -34,14 +34,14 @@ export function MainMenu() {
           Slow
         </button>
         <button 
-          className={`px-4 py-2 rounded font-bold ${sweepSpeed === 1.0 ? 'bg-accent text-black' : 'bg-white/10'}`}
-          onClick={(e) => { e.stopPropagation(); setSweepSpeed(1.0); }}
+          className={`px-4 py-2 rounded font-bold ${sweepSpeed === 0.75 ? 'bg-accent text-black' : 'bg-white/10'}`}
+          onClick={(e) => { e.stopPropagation(); setSweepSpeed(0.75); }}
         >
           Normal
         </button>
         <button 
-          className={`px-4 py-2 rounded font-bold ${sweepSpeed === 2.0 ? 'bg-accent text-black' : 'bg-white/10'}`}
-          onClick={(e) => { e.stopPropagation(); setSweepSpeed(2.0); }}
+          className={`px-4 py-2 rounded font-bold ${sweepSpeed === 1.0 ? 'bg-accent text-black' : 'bg-white/10'}`}
+          onClick={(e) => { e.stopPropagation(); setSweepSpeed(1.0); }}
         >
           Fast
         </button>

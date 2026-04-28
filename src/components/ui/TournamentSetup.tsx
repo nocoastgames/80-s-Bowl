@@ -74,6 +74,7 @@ export function TournamentSetup() {
                   onChange={(e) => setCurrentStationIndex(parseInt(e.target.value))}
                   className="bg-bg-dark border border-white/20 rounded px-4 py-2 text-lg focus:border-accent focus:outline-none"
                 >
+                  <option value={-1}>0. OFF</option>
                   {RADIO_STATIONS.map((station, i) => (
                     <option key={i} value={i}>
                       {i + 1}. {station.name}

@@ -17,20 +17,31 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       const state = useStore.getState();
       
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' || e.code === 'Escape') {
         if (state.gameState === 'playing') {
           setPaused(!state.isPaused);
         }
       }
       
-      // Handle radio station changes using 1-9 keys
-      if (e.key >= '1' && e.key <= '9') {
-        const stationIndex = parseInt(e.key) - 1;
+      let parsedNum = -1;
+      if (e.code && e.code.startsWith('Digit')) {
+        parsedNum = parseInt(e.code.replace('Digit', ''));
+      } else if (e.code && e.code.startsWith('Numpad')) {
+        const np = e.code.replace('Numpad', '');
+        if (np >= '0' && np <= '9') parsedNum = parseInt(np);
+      } else if (typeof e.key === 'string' && e.key >= '0' && e.key <= '9') {
+        parsedNum = parseInt(e.key);
+      }
+
+      if (parsedNum !== -1) {
+        const stationIndex = parsedNum - 1; // 0 becomes -1
         state.setCurrentStationIndex(stationIndex);
         if (state.gameState === 'playing') {
            // update audio engine stream immediately if playing
            import('./lib/audio').then(({ audioEngine }) => {
-               if (audioEngine.isPlayingBgm) {
+               if (stationIndex === -1) {
+                   audioEngine.stopBGM();
+               } else {
                    audioEngine.playBGM(stationIndex);
                }
            });
