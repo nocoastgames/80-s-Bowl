@@ -77,43 +77,8 @@ function createLaneTexture() {
   return texture;
 }
 
-function createGutterTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  ctx.fillStyle = '#111';
-  ctx.fillRect(0, 0, 128, 512);
-
-  // Metallic grating pattern
-  ctx.strokeStyle = '#222';
-  ctx.lineWidth = 2;
-  for(let y = 0; y < 512; y += 10) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(128, y);
-    ctx.stroke();
-  }
-  for(let x = 0; x < 128; x += 10) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, 512);
-    ctx.stroke();
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(1, 10);
-  texture.anisotropy = 16;
-  return texture;
-}
-
 export function Lane() {
   const laneTexture = useMemo(() => createLaneTexture(), []);
-  const gutterTexture = useMemo(() => createGutterTexture(), []);
 
   // Main Lane
   const [laneRef] = useBox(() => ({
@@ -157,22 +122,20 @@ export function Lane() {
       <mesh ref={leftGutterRef as any} receiveShadow>
         <boxGeometry args={[GUTTER_WIDTH, 0.2, LANE_LENGTH]} />
         <meshStandardMaterial 
-          map={gutterTexture}
-          color="#333" 
+          color="#111111" 
           emissive="#00f2ff" 
-          emissiveIntensity={0.05} 
-          roughness={0.7} 
+          emissiveIntensity={0.6} 
+          roughness={0.5} 
           metalness={0.8}
         />
       </mesh>
       <mesh ref={rightGutterRef as any} receiveShadow>
         <boxGeometry args={[GUTTER_WIDTH, 0.2, LANE_LENGTH]} />
         <meshStandardMaterial 
-          map={gutterTexture}
-          color="#333" 
+          color="#111111" 
           emissive="#00f2ff" 
-          emissiveIntensity={0.05} 
-          roughness={0.7} 
+          emissiveIntensity={0.6} 
+          roughness={0.5} 
           metalness={0.8}
         />
       </mesh>

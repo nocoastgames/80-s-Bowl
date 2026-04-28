@@ -68,7 +68,7 @@ class RetroAudioEngine {
       this.bgmAudio.crossOrigin = 'anonymous';
       this.bgmAudio.loop = true;
       // Default initial volume before store overrides
-      this.bgmAudio.volume = 0.5; 
+      this.bgmAudio.volume = 0.25; 
       
       this.init(); // ensure ctx exists
       if (this.ctx) {
