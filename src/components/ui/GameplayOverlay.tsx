@@ -179,6 +179,10 @@ export function GameplayOverlay() {
   const opacityTimeoutRef = useRef<number>();
 
   useEffect(() => {
+    audioEngine.playBGM(currentStationIndex);
+  }, []);
+
+  useEffect(() => {
     setEqOpacity(1);
     if (opacityTimeoutRef.current) clearTimeout(opacityTimeoutRef.current);
     opacityTimeoutRef.current = window.setTimeout(() => {
@@ -187,7 +191,7 @@ export function GameplayOverlay() {
   }, [currentStationIndex, songText]);
 
   return (
-    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between" onClick={() => audioEngine.playBGM(currentStationIndex)}>
+    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between">
       {/* Top Bar */}
       <header className="h-[80px] bg-gradient-to-b from-header-bg to-transparent flex justify-between items-center px-10 z-10 w-full">
         <div className="flex gap-5 flex-1">

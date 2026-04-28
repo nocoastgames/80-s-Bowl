@@ -1,17 +1,22 @@
 import { useState } from 'react';
 import { useStore } from '../../store';
-import { RADIO_STATIONS } from '../../lib/audio';
+import { RADIO_STATIONS, audioEngine } from '../../lib/audio';
 
 export function TournamentSetup() {
   const { gameMode, players, addPlayer, removePlayer, startGame, setGameState, bumpersEnabled, setBumpersEnabled, totalFrames, setTotalFrames, currentStationIndex, setCurrentStationIndex } = useStore();
   const [name, setName] = useState('');
+
+  const handleStartGame = (playerName?: string) => {
+    startGame(playerName);
+    audioEngine.playBGM(currentStationIndex);
+  };
 
   const handleAdd = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const playerName = name.trim() || `Player ${players.length + 1}`;
     
     if (gameMode === 'single') {
-      startGame(playerName);
+      handleStartGame(playerName);
     } else if (players.length < 32) {
       addPlayer(playerName);
       setName('');
@@ -98,7 +103,7 @@ export function TournamentSetup() {
 
             {gameMode === 'class' && (
               <button
-                onClick={() => startGame()}
+                onClick={() => handleStartGame()}
                 disabled={players.length < 1}
                 className="w-full mt-8 px-6 py-4 bg-[#00ff00] text-black hover:bg-[#00cc00] disabled:opacity-50 rounded font-black text-2xl transition-colors"
               >
