@@ -256,8 +256,8 @@ export function GameplayOverlay() {
       </header>
 
       {currentPlayer && (
-        <div className="absolute top-[90px] left-10 z-10 w-auto opacity-90 transition-opacity">
-          <Scorecard frames={playerFrames[currentPlayer.id] || []} playerName={currentPlayer.name} />
+        <div className="absolute top-[100px] right-10 z-10 w-auto opacity-90 transition-opacity max-h-[calc(100vh-140px)] overflow-y-auto custom-scrollbar pr-2">
+          <Scorecard frames={playerFrames[currentPlayer.id] || []} playerName={currentPlayer.name} orientation="vertical" />
         </div>
       )}
 

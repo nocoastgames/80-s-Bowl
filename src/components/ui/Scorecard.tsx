@@ -1,7 +1,7 @@
 import React from 'react';
 import { useStore, Frame } from '../../store';
 
-export function Scorecard({ frames, playerName }: { frames: Frame[], playerName: string }) {
+export function Scorecard({ frames, playerName, orientation = 'horizontal' }: { frames: Frame[], playerName: string, orientation?: 'horizontal' | 'vertical' }) {
   // Calculate running scores
   const runningScores: (number | null)[] = [];
   let currentTotal = 0;
@@ -69,7 +69,7 @@ export function Scorecard({ frames, playerName }: { frames: Frame[], playerName:
   return (
     <div className="bg-black/80 border-2 border-accent/40 rounded-lg p-2 font-mono text-white shadow-[0_0_15px_rgba(0,242,255,0.2)]">
       <div className="text-accent text-sm mb-1 uppercase tracking-wider pl-1">{playerName}'s Scorecard</div>
-      <div className="flex border border-white/20 rounded overflow-hidden">
+      <div className={`flex ${orientation === 'vertical' ? 'flex-col' : ''} border border-white/20 rounded overflow-hidden`}>
         {Array.from({ length: 10 }).map((_, i) => {
           const f = frames[i] || { roll1: null, roll2: null, roll3: null };
           let r1 = f.roll1 !== null ? f.roll1.toString() : '';
@@ -100,7 +100,7 @@ export function Scorecard({ frames, playerName }: { frames: Frame[], playerName:
             else if (r3 === '0') r3 = '-';
           }
 
-          return (
+          return orientation === 'horizontal' ? (
             <div key={i} className="flex flex-col border-r border-white/20 last:border-r-0" style={{ width: i === 9 ? '75px' : '55px' }}>
               <div className="text-center text-[10px] bg-white/10 py-0.5 border-b border-white/20">{i + 1}</div>
               <div className="flex border-b border-white/20 h-6">
@@ -112,6 +112,24 @@ export function Scorecard({ frames, playerName }: { frames: Frame[], playerName:
               </div>
               <div className="text-center text-sm leading-7 h-7">
                 {runningScores[i] !== null ? runningScores[i] : ''}
+              </div>
+            </div>
+          ) : (
+            <div key={i} className="flex border-b border-white/20 last:border-b-0 w-32">
+              <div className="w-6 flex shrink-0 items-center justify-center text-[10px] bg-white/10 border-r border-white/20 py-1">
+                {i + 1}
+              </div>
+              <div className="flex-1 flex flex-col">
+                <div className="flex border-b border-white/20 h-6">
+                  <div className="flex-1 text-center border-r border-white/20 text-sm leading-6">{r1}</div>
+                  <div className={`flex-1 text-center text-sm leading-6 ${i === 9 ? 'border-r border-white/20' : ''}`}>{r2}</div>
+                  {i === 9 && (
+                    <div className="flex-1 text-center text-sm leading-6">{r3}</div>
+                  )}
+                </div>
+                <div className="text-center text-sm leading-6 h-6 bg-black/20">
+                  {runningScores[i] !== null ? runningScores[i] : ''}
+                </div>
               </div>
             </div>
           );
