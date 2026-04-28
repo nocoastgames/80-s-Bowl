@@ -237,7 +237,7 @@ export function GameplayOverlay() {
           <div className="text-right">
             <div className="text-[12px] uppercase tracking-[1px] text-accent">Current Speed</div>
             <div className="text-[18px] text-[#00ff00]">
-              {sweepSpeed === 0.5 ? 'Slow (0.5x)' : sweepSpeed === 0.75 ? 'Normal (0.75x)' : 'Fast (1.0x)'}
+              {sweepSpeed === 0.5 ? 'Slow' : sweepSpeed === 0.75 ? 'Normal' : 'Fast'}
             </div>
           </div>
           <button
