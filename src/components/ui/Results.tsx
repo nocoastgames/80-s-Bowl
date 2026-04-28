@@ -1,5 +1,6 @@
 import { useStore, calculateTotalScore } from '../../store';
 import { audioEngine } from '../../lib/audio';
+import { Scorecard } from './Scorecard';
 
 export function Results() {
   const { players, playerFrames, resetGame, gameMode, totalFrames } = useStore();
@@ -87,6 +88,17 @@ export function Results() {
             </div>
           </>
         )}
+      </div>
+
+      <div className="w-full max-w-5xl flex flex-col gap-4 mb-8 overflow-y-auto pr-2 custom-scrollbar">
+        {playerScores.map((ps, idx) => (
+          <div key={ps.player.id} className="w-full flex items-center gap-4 bg-black/40 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-accent w-12 text-center">#{idx + 1}</div>
+            <div className="flex-1 overflow-x-auto custom-scrollbar pb-2">
+              <Scorecard frames={playerFrames[ps.player.id] || []} playerName={ps.player.name} />
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="flex gap-6">

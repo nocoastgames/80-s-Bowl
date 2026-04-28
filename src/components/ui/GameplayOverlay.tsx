@@ -61,6 +61,8 @@ const DotMatrixEQ = ({ active }: { active: boolean }) => {
   );
 };
 
+import { Scorecard } from './Scorecard';
+
 export function GameplayOverlay() {
   const { playState, setPlayState, aimAngle, setAimAngle, powerLevel, setPowerLevel, sweepSpeed, gameMode, currentFrame, totalFrames, playerFrames, players, currentPlayerIndex, teacherAdvancePending, nextPlayer, isPaused, currentStationIndex } = useStore();
   
@@ -252,6 +254,12 @@ export function GameplayOverlay() {
           </button>
         </div>
       </header>
+
+      {currentPlayer && (
+        <div className="absolute top-[90px] left-10 z-10 w-auto opacity-90 transition-opacity">
+          <Scorecard frames={playerFrames[currentPlayer.id] || []} playerName={currentPlayer.name} />
+        </div>
+      )}
 
       <div className="flex-1 relative pointer-events-auto">
         {/* Spin UI */}
