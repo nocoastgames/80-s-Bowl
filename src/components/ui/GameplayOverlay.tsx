@@ -5,7 +5,7 @@ import { motion } from 'motion/react';
 import { audioEngine } from '../../lib/audio';
 
 export function GameplayOverlay() {
-  const { playState, setPlayState, aimAngle, setAimAngle, powerLevel, setPowerLevel, sweepSpeed, gameMode, currentFrame, totalFrames, playerFrames, players, currentPlayerIndex, teacherAdvancePending, nextPlayer } = useStore();
+  const { playState, setPlayState, aimAngle, setAimAngle, powerLevel, setPowerLevel, sweepSpeed, gameMode, currentFrame, totalFrames, playerFrames, players, currentPlayerIndex, teacherAdvancePending, nextPlayer, isPaused } = useStore();
   
   const [localPos, setLocalPos] = useState(0);
   const [localAim, setLocalAim] = useState(0);
@@ -41,6 +41,11 @@ export function GameplayOverlay() {
     const loop = (time: number) => {
       const delta = (time - lastTime) / 1000;
       lastTime = time;
+      
+      if (useStore.getState().isPaused) {
+        animationFrame = requestAnimationFrame(loop);
+        return;
+      }
       
       if (playState === 'spin') {
         let next = localPosRef.current + (delta * 2.0 * sweepSpeed * posDir.current);
@@ -90,6 +95,8 @@ export function GameplayOverlay() {
 
   // Single Switch Handler
   useSingleSwitch(() => {
+    if (useStore.getState().isPaused) return;
+
     // Initialize audio on first interaction
     audioEngine.playBGM();
 
@@ -104,7 +111,7 @@ export function GameplayOverlay() {
       setPowerLevel(localPower);
       setPlayState('rolling');
     }
-  }, (playState === 'spin' || playState === 'aiming' || playState === 'power') && !teacherAdvancePending);
+  }, (playState === 'spin' || playState === 'aiming' || playState === 'power') && !teacherAdvancePending && !isPaused);
 
   if (playState === 'idle' && !teacherAdvancePending) return null;
 

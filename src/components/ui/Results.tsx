@@ -1,4 +1,5 @@
 import { useStore, calculateTotalScore } from '../../store';
+import { audioEngine } from '../../lib/audio';
 
 export function Results() {
   const { players, playerFrames, resetGame, gameMode, totalFrames } = useStore();
@@ -59,6 +60,11 @@ export function Results() {
     document.body.removeChild(link);
   };
 
+  const handleReturnToMenu = () => {
+    audioEngine.stopBGM();
+    resetGame();
+  };
+
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-dark text-white p-8 overflow-y-auto">
       <h2 className="text-6xl font-black tracking-tight mb-8 text-warn drop-shadow-[0_0_20px_rgba(255,255,0,0.4)]">
@@ -91,7 +97,7 @@ export function Results() {
           Export CSV
         </button>
         <button 
-          onClick={resetGame}
+          onClick={handleReturnToMenu}
           className="px-8 py-4 bg-panel border border-white/10 hover:bg-white/10 rounded font-bold text-2xl transition-colors"
         >
           Main Menu

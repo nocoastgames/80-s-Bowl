@@ -95,6 +95,17 @@ interface BowlingStore {
   pinsDown: number;
   setPinsDown: (count: number) => void;
 
+  pinResetTrigger: number;
+  triggerPinReset: () => void;
+
+  isPaused: boolean;
+  setPaused: (paused: boolean) => void;
+  
+  bgmVolume: number;
+  setBgmVolume: (vol: number) => void;
+  sfxVolume: number;
+  setSfxVolume: (vol: number) => void;
+
   startGame: (singlePlayerName?: string) => void;
   advanceRoll: (pinsDownThisRoll: number) => void;
   resetGame: () => void;
@@ -141,6 +152,15 @@ export const useStore = create<BowlingStore>((set, get) => ({
   setPowerLevel: (power) => set({ powerLevel: power }),
   pinsDown: 0,
   setPinsDown: (count) => set({ pinsDown: count }),
+
+  pinResetTrigger: 0,
+  triggerPinReset: () => set((state) => ({ pinResetTrigger: state.pinResetTrigger + 1 })),
+  isPaused: false,
+  setPaused: (paused) => set({ isPaused: paused }),
+  bgmVolume: 0.5,
+  setBgmVolume: (vol) => set({ bgmVolume: vol }),
+  sfxVolume: 0.8,
+  setSfxVolume: (vol) => set({ sfxVolume: vol }),
 
   startGame: (singlePlayerName) => {
     const state = get();
@@ -267,13 +287,17 @@ export const useStore = create<BowlingStore>((set, get) => ({
     });
   },
 
-  resetGame: () => set({
+  resetGame: () => set((state) => ({
     gameState: 'menu',
     players: [],
     playerFrames: {},
     currentPlayerIndex: 0,
     currentFrame: 0,
     currentRoll: 1,
-    teacherAdvancePending: false
-  })
+    teacherAdvancePending: false,
+    playState: 'idle',
+    spinAmount: 0,
+    pinsDown: 0,
+    pinResetTrigger: state.pinResetTrigger + 1
+  }))
 }));

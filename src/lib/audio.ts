@@ -3,6 +3,17 @@ class RetroAudioEngine {
   isPlayingBgm = false;
   rollSource: AudioBufferSourceNode | null = null;
   rollGain: GainNode | null = null;
+  
+  bgmAudio: HTMLAudioElement | null = null;
+  sfxVolume = 0.8;
+
+  // Free SomaFM streams for a "radio style" experience
+  streams = [
+    'https://ice1.somafm.com/groovesalad-128-mp3',
+    'https://ice1.somafm.com/secretagent-128-mp3',
+    'https://ice1.somafm.com/defcon-128-mp3',
+    'https://ice1.somafm.com/fluid-128-mp3'
+  ];
 
   init() {
     if (!this.ctx) {
@@ -13,35 +24,41 @@ class RetroAudioEngine {
     }
   }
 
+  setBgmVolume(vol: number) {
+    if (this.bgmAudio) {
+      this.bgmAudio.volume = vol;
+    }
+  }
+
+  setSfxVolume(vol: number) {
+    this.sfxVolume = vol;
+  }
+
   playBGM() {
-    if (!this.ctx) this.init();
-    if (this.isPlayingBgm || !this.ctx) return;
+    if (this.isPlayingBgm) return;
     this.isPlayingBgm = true;
 
-    const ctx = this.ctx;
-    const tempo = 115;
-    const beatLen = 60 / tempo;
+    if (!this.bgmAudio) {
+      this.bgmAudio = new Audio();
+      this.bgmAudio.crossOrigin = 'anonymous';
+      const randomStream = this.streams[Math.floor(Math.random() * this.streams.length)];
+      this.bgmAudio.src = randomStream;
+      this.bgmAudio.loop = true;
+      // Default initial volume before store overrides
+      this.bgmAudio.volume = 0.5; 
+    }
+    
+    this.bgmAudio.play().catch(e => {
+        console.warn("BGM play failed", e);
+        this.isPlayingBgm = false;
+    });
+  }
 
-    // 80s Synthwave bassline (16th notes)
-    const notes = [
-      36, 36, 48, 36, 36, 48, 36, 36, // C2
-      39, 39, 51, 39, 39, 51, 39, 39, // Eb2
-      34, 34, 46, 34, 34, 46, 34, 34, // Bb1
-      41, 41, 53, 41, 41, 53, 41, 41  // F2
-    ];
-    let noteIdx = 0;
-    let nextNoteTime = ctx.currentTime + 0.1;
-
-    const schedule = () => {
-      if (!this.isPlayingBgm) return;
-      while (nextNoteTime < ctx.currentTime + 0.1) {
-        this.playNote(notes[noteIdx], nextNoteTime, beatLen / 4);
-        nextNoteTime += beatLen / 4;
-        noteIdx = (noteIdx + 1) % notes.length;
-      }
-      requestAnimationFrame(schedule);
-    };
-    schedule();
+  stopBGM() {
+     if (this.bgmAudio) {
+         this.bgmAudio.pause();
+         this.isPlayingBgm = false;
+     }
   }
 
   playNote(midiNote: number, time: number, duration: number) {
@@ -61,8 +78,8 @@ class RetroAudioEngine {
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.08, time + duration * 0.1); // Keep it quiet
-    gain.gain.exponentialRampToValueAtTime(0.01, time + duration * 0.9);
+    gain.gain.linearRampToValueAtTime(0.08 * this.sfxVolume, time + duration * 0.1); 
+    gain.gain.exponentialRampToValueAtTime(0.01 * this.sfxVolume, time + duration * 0.9);
 
     osc.connect(filter);
     filter.connect(gain);
@@ -94,7 +111,7 @@ class RetroAudioEngine {
 
     this.rollGain = ctx.createGain();
     this.rollGain.gain.setValueAtTime(0, ctx.currentTime);
-    this.rollGain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.2);
+    this.rollGain.gain.linearRampToValueAtTime(0.6 * this.sfxVolume, ctx.currentTime + 0.2);
 
     this.rollSource.connect(filter);
     filter.connect(this.rollGain);
@@ -128,8 +145,8 @@ class RetroAudioEngine {
     osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.2);
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.4, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.4 * this.sfxVolume, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01 * this.sfxVolume, ctx.currentTime + 0.2);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -151,8 +168,8 @@ class RetroAudioEngine {
     noiseFilter.frequency.value = 1500;
 
     const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.5, ctx.currentTime);
-    noiseGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+    noiseGain.gain.setValueAtTime(0.5 * this.sfxVolume, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01 * this.sfxVolume, ctx.currentTime + 0.2);
 
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);

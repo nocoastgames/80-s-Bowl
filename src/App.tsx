@@ -4,10 +4,27 @@ import { MainMenu } from './components/ui/MainMenu';
 import { TournamentSetup } from './components/ui/TournamentSetup';
 import { GameplayOverlay } from './components/ui/GameplayOverlay';
 import { Results } from './components/ui/Results';
+import { PauseMenu } from './components/ui/PauseMenu';
 import { useStore } from './store';
+import { useEffect } from 'react';
 
 export default function App() {
   const gameState = useStore((state) => state.gameState);
+  const setPaused = useStore((state) => state.setPaused);
+  const isPaused = useStore((state) => state.isPaused);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        const state = useStore.getState();
+        if (state.gameState === 'playing') {
+          setPaused(!state.isPaused);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setPaused]);
 
   return (
     <div className="w-full h-screen bg-slate-950 overflow-hidden relative font-sans select-none">
@@ -21,6 +38,8 @@ export default function App() {
       {gameState === 'setup' && <TournamentSetup />}
       {gameState === 'playing' && <GameplayOverlay />}
       {gameState === 'results' && <Results />}
+      
+      <PauseMenu />
     </div>
   );
 }

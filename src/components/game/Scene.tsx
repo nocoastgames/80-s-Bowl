@@ -109,10 +109,21 @@ function Bumper({ position }: { position: [number, number, number] }) {
 }
 
 function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef | null>, pinRefs: React.MutableRefObject<(PinRef | null)[]> }) {
-  const { playState, setPlayState, aimAngle, powerLevel, setPinsDown, advanceRoll } = useStore();
+  const { playState, setPlayState, aimAngle, powerLevel, setPinsDown, advanceRoll, pinResetTrigger } = useStore();
   const cameraRef = useRef<any>(null);
   const rollTimer = useRef<number>(0);
   const fallenPinsThisRoll = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (pinResetTrigger > 0) {
+      ballRef.current?.reset();
+      pinRefs.current.forEach(p => p?.reset());
+      fallenPinsThisRoll.current.clear();
+      if (playState !== 'spin' && playState !== 'playing' && playState !== 'scoring') {
+          // ensure playing state aligns with physical reset if needed, but the user requested reset pins
+      }
+    }
+  }, [pinResetTrigger]);
 
   useFrame((state, delta) => {
     if (!cameraRef.current) return;
@@ -267,6 +278,7 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
 export function Scene() {
   const ballRef = useRef<BallRef>(null);
   const pinRefs = useRef<(PinRef | null)[]>([]);
+  const isPaused = useStore((state) => state.isPaused);
 
   return (
     <>
@@ -294,7 +306,7 @@ export function Scene() {
 
       <AimGuide />
 
-      <Physics gravity={[0, -9.81, 0]} defaultContactMaterial={{ friction: 0.1, restitution: 0.2 }}>
+      <Physics isPaused={isPaused} gravity={[0, -9.81, 0]} defaultContactMaterial={{ friction: 0.1, restitution: 0.2 }}>
         <GameController ballRef={ballRef} pinRefs={pinRefs} />
         <Lane />
         <Bumpers />
