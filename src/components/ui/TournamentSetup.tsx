@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useStore } from '../../store';
+import { RADIO_STATIONS } from '../../lib/audio';
 
 export function TournamentSetup() {
-  const { gameMode, players, addPlayer, removePlayer, startGame, setGameState, bumpersEnabled, setBumpersEnabled, totalFrames, setTotalFrames } = useStore();
+  const { gameMode, players, addPlayer, removePlayer, startGame, setGameState, bumpersEnabled, setBumpersEnabled, totalFrames, setTotalFrames, currentStationIndex, setCurrentStationIndex } = useStore();
   const [name, setName] = useState('');
 
   const handleAdd = (e?: React.FormEvent) => {
@@ -55,7 +56,7 @@ export function TournamentSetup() {
               </button>
             </form>
 
-            <div className="mt-8 flex items-center gap-4">
+            <div className="mt-8 flex flex-col gap-4">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input 
                   type="checkbox" 
@@ -65,6 +66,21 @@ export function TournamentSetup() {
                 />
                 <span className="text-xl font-medium">Enable Bumpers</span>
               </label>
+
+              <div className="flex flex-col gap-2">
+                <span className="text-xl font-medium">Radio Station (1-9):</span>
+                <select 
+                  value={currentStationIndex}
+                  onChange={(e) => setCurrentStationIndex(parseInt(e.target.value))}
+                  className="bg-bg-dark border border-white/20 rounded px-4 py-2 text-lg focus:border-accent focus:outline-none"
+                >
+                  {RADIO_STATIONS.map((station, i) => (
+                    <option key={i} value={i}>
+                      {i + 1}. {station.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="mt-6 flex flex-col gap-2">

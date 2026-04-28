@@ -95,10 +95,11 @@ export function GameplayOverlay() {
 
   // Single Switch Handler
   useSingleSwitch(() => {
-    if (useStore.getState().isPaused) return;
+    const state = useStore.getState();
+    if (state.isPaused) return;
 
     // Initialize audio on first interaction
-    audioEngine.playBGM();
+    audioEngine.playBGM(state.currentStationIndex);
 
     if (teacherAdvancePending) return;
 

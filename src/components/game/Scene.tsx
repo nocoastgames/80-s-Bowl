@@ -119,7 +119,7 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
       ballRef.current?.reset();
       pinRefs.current.forEach(p => p?.reset());
       fallenPinsThisRoll.current.clear();
-      if (playState !== 'spin' && playState !== 'playing' && playState !== 'scoring') {
+      if (playState !== 'spin' && playState !== 'scoring') {
           // ensure playing state aligns with physical reset if needed, but the user requested reset pins
       }
     }

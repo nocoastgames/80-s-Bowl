@@ -1,3 +1,15 @@
+export const RADIO_STATIONS = [
+  { name: 'Underground 80s', url: 'https://ice1.somafm.com/u80s-128-mp3' },
+  { name: 'PopTron', url: 'https://ice1.somafm.com/poptron-128-mp3' },
+  { name: 'Groove Salad', url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
+  { name: 'Secret Agent', url: 'https://ice1.somafm.com/secretagent-128-mp3' },
+  { name: 'DEF CON Radio', url: 'https://ice1.somafm.com/defcon-128-mp3' },
+  { name: 'Space Station', url: 'https://ice1.somafm.com/spacestation-128-mp3' },
+  { name: 'Fluid', url: 'https://ice1.somafm.com/fluid-128-mp3' },
+  { name: 'Drone Zone', url: 'https://ice1.somafm.com/dronezone-128-mp3' },
+  { name: 'Lush', url: 'https://ice1.somafm.com/lush-128-mp3' }
+];
+
 class RetroAudioEngine {
   ctx: AudioContext | null = null;
   isPlayingBgm = false;
@@ -7,12 +19,7 @@ class RetroAudioEngine {
   bgmAudio: HTMLAudioElement | null = null;
   sfxVolume = 0.8;
 
-  // Free web radio streams for a more upbeat/80s style experience
-  streams = [
-    'https://ice1.somafm.com/u80s-128-mp3',     // SomaFM Underground 80s (Synthpop, New Wave)
-    'https://ice1.somafm.com/poptron-128-mp3',  // SomaFM PopTron (Upbeat electro-pop)
-    'https://radio.plaza.one/mp3'               // Nightwave Plaza (Vaporwave / 80s aesthetic)
-  ];
+  stations = RADIO_STATIONS;
 
   init() {
     if (!this.ctx) {
@@ -33,19 +40,21 @@ class RetroAudioEngine {
     this.sfxVolume = vol;
   }
 
-  playBGM() {
-    if (this.isPlayingBgm) return;
+  playBGM(stationIndex: number = 0) {
+    if (this.isPlayingBgm && this.bgmAudio?.src === this.stations[stationIndex].url) return;
+    
+    // Changing station or initiating
     this.isPlayingBgm = true;
 
     if (!this.bgmAudio) {
       this.bgmAudio = new Audio();
       this.bgmAudio.crossOrigin = 'anonymous';
-      const randomStream = this.streams[Math.floor(Math.random() * this.streams.length)];
-      this.bgmAudio.src = randomStream;
       this.bgmAudio.loop = true;
       // Default initial volume before store overrides
       this.bgmAudio.volume = 0.5; 
     }
+    
+    this.bgmAudio.src = this.stations[stationIndex].url;
     
     this.bgmAudio.play().catch(e => {
         console.warn("BGM play failed", e);
@@ -57,6 +66,8 @@ class RetroAudioEngine {
      if (this.bgmAudio) {
          this.bgmAudio.pause();
          this.isPlayingBgm = false;
+         this.bgmAudio.src = ''; // Clean up stream
+         this.bgmAudio = null;
      }
   }
 

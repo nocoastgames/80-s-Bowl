@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStore } from '../../store';
-import { audioEngine } from '../../lib/audio';
+import { audioEngine, RADIO_STATIONS } from '../../lib/audio';
 
 export function PauseMenu() {
   const { 
@@ -15,7 +15,9 @@ export function PauseMenu() {
     triggerPinReset,
     resetGame,
     setPlayState,
-    nextPlayer
+    nextPlayer,
+    currentStationIndex,
+    setCurrentStationIndex
   } = useStore();
 
   if (!isPaused) return null;
@@ -70,6 +72,27 @@ export function PauseMenu() {
             >
               Reset Physics
             </button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-xl font-bold">Radio Station</span>
+            </div>
+            <select 
+              value={currentStationIndex}
+              onChange={(e) => {
+                const idx = parseInt(e.target.value);
+                setCurrentStationIndex(idx);
+                audioEngine.playBGM(idx);
+              }}
+              className="w-full bg-bg-dark border border-white/20 rounded px-4 py-2 text-lg focus:border-accent focus:outline-none"
+            >
+              {RADIO_STATIONS.map((station, i) => (
+                <option key={i} value={i}>
+                  {i + 1}. {station.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">

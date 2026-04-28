@@ -105,6 +105,8 @@ interface BowlingStore {
   setBgmVolume: (vol: number) => void;
   sfxVolume: number;
   setSfxVolume: (vol: number) => void;
+  currentStationIndex: number;
+  setCurrentStationIndex: (index: number) => void;
 
   startGame: (singlePlayerName?: string) => void;
   advanceRoll: (pinsDownThisRoll: number) => void;
@@ -161,6 +163,8 @@ export const useStore = create<BowlingStore>((set, get) => ({
   setBgmVolume: (vol) => set({ bgmVolume: vol }),
   sfxVolume: 0.8,
   setSfxVolume: (vol) => set({ sfxVolume: vol }),
+  currentStationIndex: 0,
+  setCurrentStationIndex: (index: number) => set({ currentStationIndex: index }),
 
   startGame: (singlePlayerName) => {
     const state = get();

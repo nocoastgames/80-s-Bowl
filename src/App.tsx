@@ -15,10 +15,25 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const state = useStore.getState();
+      
       if (e.key === 'Escape') {
-        const state = useStore.getState();
         if (state.gameState === 'playing') {
           setPaused(!state.isPaused);
+        }
+      }
+      
+      // Handle radio station changes using 1-9 keys
+      if (e.key >= '1' && e.key <= '9') {
+        const stationIndex = parseInt(e.key) - 1;
+        state.setCurrentStationIndex(stationIndex);
+        if (state.gameState === 'playing') {
+           // update audio engine stream immediately if playing
+           import('./lib/audio').then(({ audioEngine }) => {
+               if (audioEngine.isPlayingBgm) {
+                   audioEngine.playBGM(stationIndex);
+               }
+           });
         }
       }
     };
