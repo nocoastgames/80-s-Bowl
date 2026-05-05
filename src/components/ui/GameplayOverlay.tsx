@@ -207,7 +207,14 @@ export function GameplayOverlay() {
           </div>
           <div className="bg-panel border-l-4 border-accent px-5 py-2.5 rounded">
             <div className="text-[12px] uppercase tracking-[1px] text-accent">Score</div>
-            <div className="text-[24px] font-bold">{currentScore}</div>
+            <motion.div 
+              key={currentScore}
+              initial={{ scale: 1.5, color: '#00f2ff' }}
+              animate={{ scale: 1, color: '#ffffff' }}
+              className="text-[24px] font-bold"
+            >
+              {currentScore}
+            </motion.div>
           </div>
         </div>
 

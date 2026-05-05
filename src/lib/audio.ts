@@ -185,23 +185,23 @@ class RetroAudioEngine {
     if (!this.ctx) return;
     const ctx = this.ctx;
 
-    // Synth "ping" for lava lamp strike
+    // Synth thud for lava lamp strike (lower pitch)
     const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1200, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.2);
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(450, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.3);
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.4 * this.sfxVolume, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01 * this.sfxVolume, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.6 * this.sfxVolume, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01 * this.sfxVolume, ctx.currentTime + 0.3);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
-    osc.stop(ctx.currentTime + 0.2);
+    osc.stop(ctx.currentTime + 0.3);
 
-    // Noise crash
-    const bufferSize = ctx.sampleRate * 0.2;
+    // Noise crash (damped)
+    const bufferSize = ctx.sampleRate * 0.3;
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -211,12 +211,12 @@ class RetroAudioEngine {
     noise.buffer = buffer;
 
     const noiseFilter = ctx.createBiquadFilter();
-    noiseFilter.type = 'bandpass';
-    noiseFilter.frequency.value = 1500;
+    noiseFilter.type = 'lowpass';
+    noiseFilter.frequency.value = 800;
 
     const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.5 * this.sfxVolume, ctx.currentTime);
-    noiseGain.gain.exponentialRampToValueAtTime(0.01 * this.sfxVolume, ctx.currentTime + 0.2);
+    noiseGain.gain.setValueAtTime(0.4 * this.sfxVolume, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01 * this.sfxVolume, ctx.currentTime + 0.3);
 
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);

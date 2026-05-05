@@ -17,12 +17,21 @@ export interface PinRef {
 }
 
 export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
+  const physicsProps = useMemo(() => {
+    return {
+      mass: 0.35 + (Math.random() * 0.1), // 0.35 - 0.45
+      friction: 0.05 + (Math.random() * 0.1), // 0.05 - 0.15
+      restitution: 0.8 + (Math.random() * 0.4), // 0.8 - 1.2
+      linearDamping: 0.02 + (Math.random() * 0.06), // 0.02 - 0.08
+    };
+  }, []);
+
   const [pinRef, api] = useCylinder(() => ({
-    mass: 0.4, // Lighter so they fly faster when hit
+    mass: physicsProps.mass, // Lighter so they fly faster when hit
     args: [0.12, 0.12, 0.9, 16], // Slightly wider physics base to catch more collisions
     position,
-    material: { friction: 0.1, restitution: 1.0 }, // Very bouncy, less friction
-    linearDamping: 0.05, // Less air resistance, fly further
+    material: { friction: physicsProps.friction, restitution: physicsProps.restitution }, // Very bouncy, less friction
+    linearDamping: physicsProps.linearDamping, // Less air resistance, fly further
     angularDamping: 0.05, // Spin more freely
     allowSleep: true,
     sleepSpeedLimit: 0.5, // Sleep faster when moving slowly
@@ -62,11 +71,12 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
       const angle = currentUp.angleTo(new Vector3(0, 1, 0));
       const isFallen = angle > 1.0 || pos.current[1] < 0;
       
-      glowMaterialRef.current.emissiveIntensity = isFallen ? 0 : 0.8;
-      glowMaterialRef.current.opacity = isFallen ? 0.3 : 0.5; // lower opacity to see inside
+      const t = state.clock.elapsedTime;
+      const pulsing = Math.sin(t * 3) * 0.8; // pulsing glow effect
+      glowMaterialRef.current.emissiveIntensity = isFallen ? 0 : 3.0 + pulsing;
+      glowMaterialRef.current.opacity = isFallen ? 0.2 : 0.6; 
 
       if (!isFallen && blobsRef.current) {
-        const t = state.clock.elapsedTime;
         blobsRef.current.children.forEach((blob, i) => {
           const offset = blobOffsets[i];
           const y = Math.sin(t * 1.5 + offset) * 0.08;
@@ -129,7 +139,7 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
             {[...Array(3)].map((_, i) => (
               <mesh key={i} position={[0, 0, 0]}>
                 <sphereGeometry args={[0.012, 16, 16]} />
-                <meshStandardMaterial color="#00ffff" emissive="#00ffff" emissiveIntensity={1.5} />
+                <meshStandardMaterial color="#00ffff" emissive="#00ffff" emissiveIntensity={3.5} />
               </mesh>
             ))}
           </group>
