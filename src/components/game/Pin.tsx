@@ -26,6 +26,22 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
     };
   }, []);
 
+  const colors = useMemo(() => {
+    let rowIndex = 0;
+    if (id >= 1 && id <= 2) rowIndex = 1;
+    else if (id >= 3 && id <= 5) rowIndex = 2;
+    else if (id >= 6 && id <= 9) rowIndex = 3;
+
+    const ROW_COLORS = [
+      { main: '#ff00ff', blob: '#00ffff' }, // Magenta with Cyan blobs
+      { main: '#00ffff', blob: '#ff00ff' }, // Cyan with Magenta blobs
+      { main: '#00ff00', blob: '#ffff00' }, // Green with Yellow blobs
+      { main: '#ff0000', blob: '#ff8800' }, // Red with Orange blobs
+    ];
+
+    return ROW_COLORS[rowIndex] || ROW_COLORS[0];
+  }, [id]);
+
   const [pinRef, api] = useCylinder(() => ({
     mass: physicsProps.mass, // Lighter so they fly faster when hit
     args: [0.12, 0.12, 0.9, 16], // Slightly wider physics base to catch more collisions
@@ -128,8 +144,8 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
             <cylinderGeometry args={[0.03, 0.06, 0.2, 16]} />
             <meshStandardMaterial 
               ref={glowMaterialRef}
-              color="#ff00ff" 
-              emissive="#ff00ff" 
+              color={colors.main} 
+              emissive={colors.main} 
               emissiveIntensity={0.8} 
               transparent 
               opacity={0.5} 
@@ -139,7 +155,7 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
             {[...Array(3)].map((_, i) => (
               <mesh key={i} position={[0, 0, 0]}>
                 <sphereGeometry args={[0.012, 16, 16]} />
-                <meshStandardMaterial color="#00ffff" emissive="#00ffff" emissiveIntensity={3.5} />
+                <meshStandardMaterial color={colors.blob} emissive={colors.blob} emissiveIntensity={3.5} />
               </mesh>
             ))}
           </group>
