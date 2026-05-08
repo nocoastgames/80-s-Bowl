@@ -97,6 +97,8 @@ interface BowlingStore {
 
   pinResetTrigger: number;
   triggerPinReset: () => void;
+  oneTouchMode: boolean;
+  setOneTouchMode: (enabled: boolean) => void;
 
   isPaused: boolean;
   setPaused: (paused: boolean) => void;
@@ -157,6 +159,8 @@ export const useStore = create<BowlingStore>((set, get) => ({
 
   pinResetTrigger: 0,
   triggerPinReset: () => set((state) => ({ pinResetTrigger: state.pinResetTrigger + 1 })),
+  oneTouchMode: false,
+  setOneTouchMode: (enabled) => set({ oneTouchMode: enabled }),
   isPaused: false,
   setPaused: (paused) => set({ isPaused: paused }),
   bgmVolume: 0.5,
@@ -187,7 +191,7 @@ export const useStore = create<BowlingStore>((set, get) => ({
       currentFrame: 0,
       currentRoll: 1,
       gameState: 'playing',
-      playState: 'spin',
+      playState: state.oneTouchMode ? 'aiming' : 'spin',
       spinAmount: 0,
       teacherAdvancePending: false,
       pinsDown: 0
@@ -203,7 +207,7 @@ export const useStore = create<BowlingStore>((set, get) => ({
         currentPlayerIndex: nextIdx,
         currentRoll: 1,
         teacherAdvancePending: false,
-        playState: 'spin',
+        playState: state.oneTouchMode ? 'aiming' : 'spin',
         spinAmount: 0,
         pinsDown: 0
       });
@@ -215,7 +219,7 @@ export const useStore = create<BowlingStore>((set, get) => ({
           currentFrame: nextFrame,
           currentRoll: 1,
           teacherAdvancePending: false,
-          playState: 'spin',
+          playState: state.oneTouchMode ? 'aiming' : 'spin',
           spinAmount: 0,
           pinsDown: 0
         });

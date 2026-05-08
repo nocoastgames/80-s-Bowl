@@ -17,7 +17,9 @@ export function PauseMenu() {
     setPlayState,
     nextPlayer,
     currentStationIndex,
-    setCurrentStationIndex
+    setCurrentStationIndex,
+    oneTouchMode,
+    setOneTouchMode
   } = useStore();
 
   if (!isPaused) return null;
@@ -51,6 +53,16 @@ export function PauseMenu() {
         <h2 className="text-4xl font-black text-center text-accent mb-8 uppercase tracking-widest">Paused</h2>
         
         <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <span className="text-xl font-bold">1-Touch Mode</span>
+            <button 
+              onClick={() => setOneTouchMode(!oneTouchMode)}
+              className={`px-4 py-2 font-bold rounded ${oneTouchMode ? 'bg-accent text-black' : 'bg-white/10 text-white'}`}
+            >
+              {oneTouchMode ? 'ON' : 'OFF'}
+            </button>
+          </div>
+
           <div className="flex items-center justify-between">
             <span className="text-xl font-bold">Bumpers</span>
             <button 

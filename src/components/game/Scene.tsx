@@ -51,8 +51,9 @@ function FloatingTriangles() {
 function AimGuide() {
   const groupRef = useRef<Group>(null);
   const pivotRef = useRef<Group>(null);
+  const matRef = useRef<any>(null);
 
-  useFrame(() => {
+  useFrame(({ clock }) => {
     const state = useStore.getState();
     if (groupRef.current) {
       groupRef.current.position.x = 0; // Always start in middle
@@ -61,19 +62,26 @@ function AimGuide() {
     if (pivotRef.current) {
       pivotRef.current.rotation.y = state.playState === 'spin' ? 0 : state.aimAngle;
     }
+    if (matRef.current && state.oneTouchMode) {
+       matRef.current.opacity = 0.6 + Math.sin(clock.elapsedTime * 6) * 0.4;
+    } else if (matRef.current) {
+       matRef.current.opacity = 0.8;
+    }
   });
+
+  const oneTouchMode = useStore(s => s.oneTouchMode);
 
   return (
     <group ref={groupRef} position={[0, 0.11, 9]}>
       <group ref={pivotRef}>
         <mesh position={[0, 0, -3]}>
-          <boxGeometry args={[0.05, 0.01, 6]} />
-          <meshBasicMaterial color="#ffff00" transparent opacity={0.6} />
+          <boxGeometry args={oneTouchMode ? [0.15, 0.02, 8] : [0.05, 0.01, 6]} />
+          <meshBasicMaterial color={oneTouchMode ? "#00ff00" : "#ffff00"} transparent opacity={0.6} />
         </mesh>
         {/* Arrow head */}
-        <mesh position={[0, 0, -6]} rotation={[-Math.PI / 2, 0, 0]}>
-          <coneGeometry args={[0.15, 0.5, 3]} />
-          <meshBasicMaterial color="#ffff00" transparent opacity={0.8} />
+        <mesh position={oneTouchMode ? [0, 0, -7] : [0, 0, -6]} rotation={[-Math.PI / 2, 0, 0]}>
+          <coneGeometry args={oneTouchMode ? [0.4, 1.0, 3] : [0.15, 0.5, 3]} />
+          <meshBasicMaterial ref={matRef} color={oneTouchMode ? "#00ff00" : "#ffff00"} transparent opacity={0.8} />
         </mesh>
       </group>
     </group>
@@ -243,7 +251,7 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
           
           setTimeout(() => {
             useStore.setState({ spinAmount: 0 });
-            setPlayState('spin');
+            setPlayState(nextState.oneTouchMode ? 'aiming' : 'spin');
             fallenPinsThisRoll.current.clear();
           }, 1500);
         } else if (nextState.teacherAdvancePending) {

@@ -1,7 +1,7 @@
 import { useStore } from '../../store';
 
 export function MainMenu() {
-  const { setGameState, sweepSpeed, setSweepSpeed, setGameMode } = useStore();
+  const { setGameState, sweepSpeed, setSweepSpeed, setGameMode, oneTouchMode, setOneTouchMode } = useStore();
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-dark text-white p-8">
@@ -25,26 +25,44 @@ export function MainMenu() {
         </button>
       </div>
 
-      <div className="flex items-center gap-4 bg-panel p-4 rounded border border-white/10">
-        <span className="font-medium text-accent uppercase tracking-[1px] text-[12px]">Game Speed:</span>
-        <button 
-          className={`px-4 py-2 rounded font-bold ${sweepSpeed === 0.5 ? 'bg-accent text-black' : 'bg-white/10'}`}
-          onClick={(e) => { e.stopPropagation(); setSweepSpeed(0.5); }}
-        >
-          Slow
-        </button>
-        <button 
-          className={`px-4 py-2 rounded font-bold ${sweepSpeed === 0.75 ? 'bg-accent text-black' : 'bg-white/10'}`}
-          onClick={(e) => { e.stopPropagation(); setSweepSpeed(0.75); }}
-        >
-          Normal
-        </button>
-        <button 
-          className={`px-4 py-2 rounded font-bold ${sweepSpeed === 1.0 ? 'bg-accent text-black' : 'bg-white/10'}`}
-          onClick={(e) => { e.stopPropagation(); setSweepSpeed(1.0); }}
-        >
-          Fast
-        </button>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-4 bg-panel p-4 rounded border border-white/10 justify-center">
+          <span className="font-medium text-accent uppercase tracking-[1px] text-[12px] w-32 text-right">Game Speed:</span>
+          <button 
+            className={`px-4 py-2 rounded font-bold ${sweepSpeed === 0.5 ? 'bg-accent text-black' : 'bg-white/10'}`}
+            onClick={(e) => { e.stopPropagation(); setSweepSpeed(0.5); }}
+          >
+            Slow
+          </button>
+          <button 
+            className={`px-4 py-2 rounded font-bold ${sweepSpeed === 0.75 ? 'bg-accent text-black' : 'bg-white/10'}`}
+            onClick={(e) => { e.stopPropagation(); setSweepSpeed(0.75); }}
+          >
+            Normal
+          </button>
+          <button 
+            className={`px-4 py-2 rounded font-bold ${sweepSpeed === 1.0 ? 'bg-accent text-black' : 'bg-white/10'}`}
+            onClick={(e) => { e.stopPropagation(); setSweepSpeed(1.0); }}
+          >
+            Fast
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4 bg-panel p-4 rounded border border-white/10 justify-center">
+          <span className="font-medium text-accent uppercase tracking-[1px] text-[12px] w-32 text-right">Controls:</span>
+          <button 
+            className={`px-4 py-2 rounded font-bold ${!oneTouchMode ? 'bg-accent text-black' : 'bg-white/10'}`}
+            onClick={(e) => { e.stopPropagation(); setOneTouchMode(false); }}
+          >
+            Standard
+          </button>
+          <button 
+            className={`px-4 py-2 rounded font-bold ${oneTouchMode ? 'bg-accent text-black' : 'bg-white/10'}`}
+            onClick={(e) => { e.stopPropagation(); setOneTouchMode(true); }}
+          >
+            1-Touch Mode
+          </button>
+        </div>
       </div>
     </div>
   );

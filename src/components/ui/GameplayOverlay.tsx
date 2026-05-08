@@ -64,7 +64,7 @@ const DotMatrixEQ = ({ active }: { active: boolean }) => {
 import { Scorecard } from './Scorecard';
 
 export function GameplayOverlay() {
-  const { playState, setPlayState, aimAngle, setAimAngle, powerLevel, setPowerLevel, sweepSpeed, gameMode, currentFrame, totalFrames, playerFrames, players, currentPlayerIndex, teacherAdvancePending, nextPlayer, isPaused, currentStationIndex } = useStore();
+  const { playState, setPlayState, aimAngle, setAimAngle, powerLevel, setPowerLevel, sweepSpeed, gameMode, currentFrame, totalFrames, playerFrames, players, currentPlayerIndex, teacherAdvancePending, nextPlayer, isPaused, currentStationIndex, oneTouchMode } = useStore();
   
   const [localPos, setLocalPos] = useState(0);
   const [localAim, setLocalAim] = useState(0);
@@ -165,8 +165,15 @@ export function GameplayOverlay() {
     if (playState === 'spin') {
       setPlayState('aiming');
     } else if (playState === 'aiming') {
+      const state = useStore.getState();
       setAimAngle(localAim);
-      setPlayState('power');
+      if (state.oneTouchMode) {
+        setPowerLevel(90);
+        useStore.setState({ spinAmount: 0 }); // reset spin to minimal (0 is max spin in spin mode, wait what is spin value?)
+        setPlayState('rolling');
+      } else {
+        setPlayState('power');
+      }
     } else if (playState === 'power') {
       setPowerLevel(localPower);
       setPlayState('rolling');
@@ -321,7 +328,7 @@ export function GameplayOverlay() {
             {teacherAdvancePending && "Waiting for Teacher..."}
             {!teacherAdvancePending && playState === 'idle' && "Resetting..."}
             {!teacherAdvancePending && playState === 'spin' && "Press Switch to Lock Spin"}
-            {!teacherAdvancePending && playState === 'aiming' && "Press Switch to Lock Aim"}
+            {!teacherAdvancePending && playState === 'aiming' && (oneTouchMode ? "Press Switch to Bowl" : "Press Switch to Lock Aim")}
             {!teacherAdvancePending && playState === 'power' && "Press Switch for Power"}
             {!teacherAdvancePending && playState === 'rolling' && "Rolling..."}
             {!teacherAdvancePending && playState === 'scoring' && "Scoring..."}
