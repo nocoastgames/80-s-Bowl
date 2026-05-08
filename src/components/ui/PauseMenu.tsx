@@ -152,6 +152,16 @@ export function PauseMenu() {
               Skip Bowler
             </button>
             <button 
+              onClick={() => {
+                setPaused(false);
+                audioEngine.stopBGM();
+                useStore.setState({ gameState: 'results', playState: 'idle' });
+              }}
+              className="w-full bg-[#ff00ff] hover:bg-white text-white hover:text-black py-3 rounded font-black uppercase tracking-wider transition-colors"
+            >
+              End Game
+            </button>
+            <button 
               onClick={handleReturnToMenu}
               className="w-full bg-panel border-2 border-warn hover:bg-warn hover:text-black py-3 rounded font-black uppercase tracking-wider transition-colors"
             >

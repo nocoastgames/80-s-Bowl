@@ -308,12 +308,17 @@ export function GameplayOverlay() {
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-50">
             <div className="bg-panel p-8 rounded-xl border border-white/20 text-center max-w-md">
               <h2 className="text-3xl font-bold text-accent mb-4">Turn Complete</h2>
-              <p className="text-xl mb-8">{currentPlayer?.name} scored {currentScore} points!</p>
+              <p className="text-xl mb-4">{currentPlayer?.name} scored {currentScore} points!</p>
+              
+              {!(currentFrame === totalFrames - 1 && currentPlayerIndex === players.length - 1) && players[(currentPlayerIndex + 1) % players.length] && (
+                <p className="text-lg text-[#00ffff] mb-8 font-bold">Next up: {players[(currentPlayerIndex + 1) % players.length].name}</p>
+              )}
+              
               <button 
                 onClick={nextPlayer}
                 className="bg-warn text-black px-8 py-4 rounded font-black text-2xl uppercase tracking-wider hover:bg-white transition-colors shadow-[0_0_20px_rgba(255,255,0,0.4)] pointer-events-auto"
               >
-                Next Player
+                {(currentFrame === totalFrames - 1 && currentPlayerIndex === players.length - 1) ? "Finish Game" : "Next Player"}
               </button>
               <p className="text-[#aaa] mt-4 text-sm">(Teacher must click to advance)</p>
             </div>
