@@ -18,6 +18,8 @@ export interface PinRef {
   getPosition: () => [number, number, number];
   getRotation: () => [number, number, number];
   getSpeed: () => number;
+  /** Has this pin stopped moving *and* stopped rotating? */
+  isSettled: () => boolean;
   isFallen: () => boolean;
   /** Has started to go over — used to sound the hit the moment it happens. */
   isTipping: () => boolean;
@@ -92,13 +94,17 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
     linearDamping: physicsProps.linearDamping, // Less air resistance, fly further
     angularDamping: 0.05, // Spin more freely
     allowSleep: true,
-    sleepSpeedLimit: 0.5, // Sleep faster when moving slowly
-    sleepTimeLimit: 0.1, // Require less time to fall asleep
+    // Sleep gently. The old 0.5 / 0.1s was aggressive enough to put a pin to
+    // sleep while it was still slowly toppling, freezing it at an angle below
+    // the fallen threshold so it never counted and never finished falling.
+    sleepSpeedLimit: 0.12,
+    sleepTimeLimit: 0.5,
   }));
 
   const pos = useRef<[number, number, number]>(position);
   const rot = useRef<[number, number, number]>([0, 0, 0]);
   const vel = useRef<[number, number, number]>([0, 0, 0]);
+  const angVel = useRef<[number, number, number]>([0, 0, 0]);
   const glowMaterialRef = useRef<MeshStandardMaterial>(null);
   const blobsRef = useRef<THREE.Group>(null);
   const visualRef = useRef<THREE.Group>(null);
@@ -124,6 +130,7 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
   api.position.subscribe((p) => (pos.current = p));
   api.rotation.subscribe((r) => (rot.current = r));
   api.velocity.subscribe((v) => (vel.current = v));
+  api.angularVelocity.subscribe((v) => (angVel.current = v));
 
   // Force sleep on mount so they don't wobble
   useEffect(() => {
@@ -269,6 +276,14 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
     getPosition: () => pos.current,
     getRotation: () => rot.current,
     getSpeed: () => Math.hypot(vel.current[0], vel.current[1], vel.current[2]),
+    isSettled: () => {
+      // Angular velocity is the important half. A pin going over rotates
+      // almost in place, so a linear-speed check alone reports it as still
+      // and the rack gets counted while pins are mid-fall.
+      const linear = Math.hypot(vel.current[0], vel.current[1], vel.current[2]);
+      const angular = Math.hypot(angVel.current[0], angVel.current[1], angVel.current[2]);
+      return linear < 0.12 && angular < 0.3;
+    },
     isFallen: () => tiltAngle(rot.current) > FALLEN_ANGLE || pos.current[1] < 0,
     isTipping: () => tiltAngle(rot.current) > TIPPING_ANGLE || pos.current[1] < 0,
   }));

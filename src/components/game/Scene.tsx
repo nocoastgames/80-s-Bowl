@@ -6,7 +6,7 @@ import { Vector3, Group } from 'three';
 import { useStore, useActiveSettings, getActiveSettings } from '../../store';
 import { Ball, BallRef } from './Ball';
 import { Lane, LANE_LENGTH, LANE_HALF_WIDTH, PIT_ENTRY_Z } from './Lane';
-import { Pin, PinRef } from './Pin';
+import { Pin, PinRef, tiltAngle } from './Pin';
 import { audioEngine } from '../../lib/audio';
 import { sweep } from '../../lib/sweep';
 import { MAT, CONTACT_PAIRS, type ContactPair } from '../../lib/physics';
@@ -39,9 +39,7 @@ const GUTTER_LINGER_S = 1.2;
 /** Minimum time in 'scoring' before we start looking for a settled rack. */
 const MIN_SETTLE_S = 1.0;
 /** Hard cap on settling, in case something is still jittering. */
-const MAX_SETTLE_S = 2.6;
-/** Below this speed a pin counts as stopped. */
-const PIN_STILL_SPEED = 0.15;
+const MAX_SETTLE_S = 3.4;
 /** Pause between scoring and the next bowler taking control. */
 const NEXT_TURN_DELAY_MS = 900;
 /** Give up on a roll that never reaches the pins. */
@@ -274,7 +272,18 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
         powerLevel: +useStore.getState().powerLevel.toFixed(1),
         spinAmount: +useStore.getState().spinAmount.toFixed(3),
         pins: pinRefs.current.map((p) =>
-          p ? { y: +p.getPosition()[1].toFixed(2), z: +p.getPosition()[2].toFixed(2), fallen: p.isFallen() } : null
+          p
+            ? {
+                y: +p.getPosition()[1].toFixed(2),
+                // Tilt in degrees against the 57-degree fallen threshold, plus
+                // whether the pin has actually stopped. A pin sitting near the
+                // threshold and still rotating is the signature of a rack
+                // counted before it finished falling.
+                tilt: +((tiltAngle(p.getRotation()) * 180) / Math.PI).toFixed(1),
+                fallen: p.isFallen(),
+                settled: p.isSettled(),
+              }
+            : null
         ),
       };
     }
@@ -335,7 +344,7 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
     // single roll, which adds up fast with a full class waiting their turn.
     if (rollTimer.current < MIN_SETTLE_S) return;
     if (rollTimer.current < MAX_SETTLE_S) {
-      const stillMoving = pinRefs.current.some((p) => p && p.getSpeed() > PIN_STILL_SPEED);
+      const stillMoving = pinRefs.current.some((p) => p && !p.isSettled());
       if (stillMoving) return;
     }
 
