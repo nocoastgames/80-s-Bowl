@@ -1,0 +1,46 @@
+name: Check
+
+# Runs the TypeScript typecheck and a production build. This is the safety net
+# for a machine without Node installed locally: push a branch or open a pull
+# request and GitHub reports within a minute or two whether the code actually
+# compiles, before anything reaches main and deploys.
+on:
+  push:
+    # Pushes to main already run the deploy workflow, which builds anyway.
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+# A branch push followed by opening a pull request would otherwise start two
+# identical runs; keep only the newest.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      # npm install rather than npm ci: package-lock.json is out of date with
+      # package.json until it is regenerated and committed, and npm ci refuses
+      # to run against a mismatched lockfile.
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
