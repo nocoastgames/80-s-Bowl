@@ -1,6 +1,7 @@
 import { useBox } from '@react-three/cannon';
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
+import { MAT } from '../../lib/physics';
 
 export const LANE_WIDTH = 2.4;
 export const LANE_LENGTH = 20;
@@ -107,7 +108,7 @@ function Wall({
     type: 'Static',
     args,
     position,
-    material: { friction: 0.2, restitution: 0.1 },
+    material: MAT.wall,
   }));
   return null;
 }
@@ -127,7 +128,7 @@ export function Lane() {
     type: 'Static',
     args: [LANE_WIDTH, 0.2, LANE_LENGTH],
     position: [0, -0.1, 0],
-    material: { friction: 0.1, restitution: 0.5 }
+    material: MAT.lane
   }));
 
   // Left Gutter
@@ -135,7 +136,7 @@ export function Lane() {
     type: 'Static',
     args: [GUTTER_WIDTH, 0.2, LANE_LENGTH],
     position: [-gutterCenterX, gutterCenterY, 0],
-    material: { friction: 0.02, restitution: 0.05 }
+    material: MAT.gutter
   }));
 
   // Right Gutter
@@ -143,7 +144,7 @@ export function Lane() {
     type: 'Static',
     args: [GUTTER_WIDTH, 0.2, LANE_LENGTH],
     position: [gutterCenterX, gutterCenterY, 0],
-    material: { friction: 0.02, restitution: 0.05 }
+    material: MAT.gutter
   }));
 
   const outerWallX = LANE_HALF_WIDTH + GUTTER_WIDTH;

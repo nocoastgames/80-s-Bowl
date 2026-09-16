@@ -1,4 +1,4 @@
-import { Physics, useBox } from '@react-three/cannon';
+import { Physics, useBox, useContactMaterial } from '@react-three/cannon';
 import { PerspectiveCamera, Grid, Float } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
@@ -9,6 +9,7 @@ import { Lane, LANE_LENGTH, LANE_HALF_WIDTH, PIT_ENTRY_Z } from './Lane';
 import { Pin, PinRef } from './Pin';
 import { audioEngine } from '../../lib/audio';
 import { sweep } from '../../lib/sweep';
+import { MAT, CONTACT_PAIRS, type ContactPair } from '../../lib/physics';
 
 const PIN_POSITIONS: [number, number, number][] = [
   [0, 0.45, -LANE_LENGTH / 2 + 1.2], // 1
@@ -116,6 +117,36 @@ function AimGuide() {
   );
 }
 
+/**
+ * Registers the contact pairs. cannon-es only applies friction and restitution
+ * from a ContactMaterial matching the two colliding bodies' materials, so
+ * without this every collision falls back to the world default.
+ */
+function PhysicsMaterials() {
+  return (
+    <>
+      {CONTACT_PAIRS.map((pair) => (
+        <ContactPairBinding key={`${pair.a}-${pair.b}`} pair={pair} />
+      ))}
+    </>
+  );
+}
+
+function ContactPairBinding({ pair }: { pair: ContactPair }) {
+  useContactMaterial(
+    pair.a,
+    pair.b,
+    {
+      friction: pair.friction,
+      restitution: pair.restitution,
+      contactEquationStiffness: pair.contactEquationStiffness,
+      contactEquationRelaxation: pair.contactEquationRelaxation,
+    },
+    []
+  );
+  return null;
+}
+
 function Bumpers() {
   // Bumpers follow the *current bowler's* profile, so one game can mix students
   // who need them with students who don't.
@@ -124,24 +155,41 @@ function Bumpers() {
 
   return (
     <>
-      <Bumper position={[-1.25, 0.2, 0]} />
-      <Bumper position={[1.25, 0.2, 0]} />
+      <Bumper position={[-(LANE_HALF_WIDTH + 0.05), 0.2, 0]} />
+      <Bumper position={[LANE_HALF_WIDTH + 0.05, 0.2, 0]} />
     </>
   );
 }
 
 function Bumper({ position }: { position: [number, number, number] }) {
+  const matRef = useRef<any>(null);
+  const flashUntil = useRef(0);
+
   const [ref] = useBox(() => ({
     type: 'Static',
     args: [0.1, 0.4, LANE_LENGTH],
     position,
-    material: { friction: 0.1, restitution: 0.5 }
+    material: MAT.bumper,
+    onCollide: () => {
+      // Sound and light the bumper on contact. For a student who can't easily
+      // track a small fast ball, this is the clearest signal that the bumper
+      // did its job and the ball is still live.
+      const now = performance.now();
+      if (now > flashUntil.current) audioEngine.playBumper();
+      flashUntil.current = now + 260;
+    },
   }));
+
+  useFrame(() => {
+    if (!matRef.current) return;
+    const remaining = flashUntil.current - performance.now();
+    matRef.current.emissiveIntensity = remaining > 0 ? 0.5 + (remaining / 260) * 2.5 : 0.5;
+  });
 
   return (
     <mesh ref={ref as any}>
       <boxGeometry args={[0.1, 0.4, LANE_LENGTH]} />
-      <meshStandardMaterial color="#ff00ff" emissive="#ff00ff" emissiveIntensity={0.5} />
+      <meshStandardMaterial ref={matRef} color="#ff00ff" emissive="#ff00ff" emissiveIntensity={0.5} />
     </mesh>
   );
 }
@@ -358,7 +406,16 @@ export function Scene() {
 
       <AimGuide />
 
-      <Physics isPaused={isPaused} gravity={[0, -9.81, 0]} defaultContactMaterial={{ friction: 0.1, restitution: 0.2 }}>
+      {/* More solver iterations than the default 5: a fast, heavy ball against
+          a thin static wall is exactly the case where a loose solver lets the
+          contact mush out instead of rebounding. Cheap at this body count. */}
+      <Physics
+        isPaused={isPaused}
+        gravity={[0, -9.81, 0]}
+        iterations={12}
+        defaultContactMaterial={{ friction: 0.1, restitution: 0.2 }}
+      >
+        <PhysicsMaterials />
         <GameController ballRef={ballRef} pinRefs={pinRefs} />
         <Lane />
         <Bumpers />

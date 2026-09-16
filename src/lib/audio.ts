@@ -228,6 +228,30 @@ class RetroAudioEngine {
     noise.start();
   }
 
+  /**
+   * Rubbery thump for a ball rebounding off a bumper. Pitched up rather than
+   * down, so it reads as "still in play" next to the gutter's falling blip.
+   */
+  playBumper() {
+    if (!this.ctx) this.init();
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(150, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(320, ctx.currentTime + 0.12);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.35 * this.sfxVolume, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.22);
+  }
+
   /** Hollow descending blip for a ball that drops into the gutter. */
   playGutter() {
     if (!this.ctx) this.init();

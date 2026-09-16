@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { MeshStandardMaterial, Vector3, Euler } from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useStore } from '../../store';
+import { MAT } from '../../lib/physics';
 
 interface PinProps {
   position: [number, number, number];
@@ -39,11 +40,15 @@ export function tiltAngle(rot: [number, number, number]): number {
 }
 
 export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
+  // Slight variation per pin so a rack never falls the same way twice.
+  //
+  // Friction and restitution used to be randomised here too, but a body's own
+  // values are never consulted during a collision — cannon-es reads them from
+  // the ContactMaterial for the pair (see lib/physics.ts), so those two did
+  // nothing. Mass and damping are genuine per-body properties and still vary.
   const physicsProps = useMemo(() => {
     return {
       mass: 0.35 + (Math.random() * 0.1), // 0.35 - 0.45
-      friction: 0.05 + (Math.random() * 0.1), // 0.05 - 0.15
-      restitution: 0.8 + (Math.random() * 0.4), // 0.8 - 1.2
       linearDamping: 0.02 + (Math.random() * 0.06), // 0.02 - 0.08
     };
   }, []);
@@ -68,7 +73,7 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
     mass: physicsProps.mass, // Lighter so they fly faster when hit
     args: [0.12, 0.12, 0.9, 16], // Slightly wider physics base to catch more collisions
     position,
-    material: { friction: physicsProps.friction, restitution: physicsProps.restitution }, // Very bouncy, less friction
+    material: MAT.pin,
     linearDamping: physicsProps.linearDamping, // Less air resistance, fly further
     angularDamping: 0.05, // Spin more freely
     allowSleep: true,

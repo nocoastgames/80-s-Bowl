@@ -3,6 +3,8 @@ import { useFrame } from '@react-three/fiber';
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { useStore } from '../../store';
 import { audioEngine } from '../../lib/audio';
+import { LANE_HALF_WIDTH, LANE_LENGTH } from './Lane';
+import { MAT } from '../../lib/physics';
 
 export interface BallRef {
   reset: () => void;
@@ -12,13 +14,15 @@ export interface BallRef {
 }
 
 const START_POS: [number, number, number] = [0, 0.3, 9];
+/** Distance from the foul line to the head pin, used to ramp the hook in. */
+const LANE_TRAVEL = START_POS[2] + LANE_LENGTH / 2;
 
 export const Ball = forwardRef<BallRef, {}>((_, ref) => {
   const [ballRef, api] = useSphere(() => ({
     mass: 12, // Heavier ball to match larger size
     args: [0.25], // Larger radius
     position: START_POS,
-    material: { friction: 0.1, restitution: 0.2 },
+    material: MAT.ball,
     allowSleep: true,
   }));
 
@@ -34,11 +38,24 @@ export const Ball = forwardRef<BallRef, {}>((_, ref) => {
       api.velocity.set(0, 0, 0);
       api.angularVelocity.set(0, 0, 0);
     } else if (state.playState === 'rolling') {
-      // Add heavy hook/spin force
-      if (Math.abs(state.spinAmount) > 0.01) {
-        // We supply an impulse force, multiplier adjusted for pronounced but not excessive spin effect
-        api.applyForce([state.spinAmount * 25, 0, 0], [0, 0, 0]);
-      }
+      const spin = state.spinAmount;
+      if (Math.abs(spin) <= 0.01) return;
+
+      const [x, , z] = pos.current;
+
+      // The other half of why the ball used to ride the bumper: this force was
+      // applied at full strength for the entire roll, so a ball that bounced
+      // off was immediately shoved back into the rail. Skip it while the ball
+      // is already at the edge and the spin points further that way.
+      const atEdge = Math.abs(x) > LANE_HALF_WIDTH - 0.3;
+      if (atEdge && Math.sign(x) === Math.sign(spin)) return;
+
+      // Ramp the hook in over the length of the lane, the way a real ball
+      // skids first and bites later, instead of curving from the foul line.
+      const travelled = (START_POS[2] - z) / LANE_TRAVEL;
+      const hook = Math.min(1, Math.max(0, travelled) * 1.7);
+
+      api.applyForce([spin * 28 * hook, 0, 0], [0, 0, 0]);
     }
   });
 
