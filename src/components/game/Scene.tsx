@@ -42,6 +42,36 @@ const MIN_SETTLE_S = 1.0;
 const MAX_SETTLE_S = 3.4;
 /** Pause between scoring and the next bowler taking control. */
 const NEXT_TURN_DELAY_MS = 900;
+
+/**
+ * Camera easing, as exponential rates rather than a fixed per-frame fraction,
+ * so the motion is the same on a 144Hz monitor as on a 30fps Chromebook.
+ */
+const CAMERA_FOLLOW_K = 6.5;
+/**
+ * Deliberately about three times slower than the follow. The camera used to
+ * snap back the instant scoring ended, which meant it was retreating up the
+ * lane exactly while the pins were being swept — the animation played to
+ * nobody.
+ */
+const CAMERA_RETURN_K = 2.2;
+/** Closest the follow camera gets to the pin deck; also the "watch it" view. */
+const DECK_VIEW_Z = -LANE_LENGTH / 2 + 5;
+/** Extra time held at the deck after the sweep, before pulling back. */
+const DECK_HOLD_TAIL_MS = 300;
+/**
+ * How much of the camera's journey back to the foul line to wait out before
+ * handing control over. Without this the next bowler gets the switch while the
+ * camera is still halfway down the lane and the aim guide is behind it.
+ */
+const CAMERA_RETURN_SETTLE_MS = 800;
+/** Total pause when a sweep runs: watch it, then ride the camera back. */
+const SWEEP_HANDOVER_MS = RACK_CLEAR_MS + DECK_HOLD_TAIL_MS + CAMERA_RETURN_SETTLE_MS;
+
+/** Frame-rate independent lerp factor for an exponential approach. */
+function easeFactor(k: number, delta: number) {
+  return 1 - Math.exp(-k * Math.min(delta, 0.1));
+}
 /** Give up on a roll that never reaches the pins. */
 const ROLL_TIMEOUT_S = 6;
 
@@ -238,6 +268,8 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
   const wasGutter = useRef(false);
   const gutterTimer = useRef(0);
   const cameraTarget = useRef(new Vector3());
+  /** Keep the camera at the pin deck until this timestamp. */
+  const cameraHoldUntil = useRef(0);
 
   useEffect(() => {
     if (pinResetTrigger > 0) {
@@ -292,9 +324,9 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
     if (playState === 'rolling' || playState === 'scoring') {
       const ballPos = ballRef.current?.getPosition();
       if (ballPos) {
-        const targetZ = Math.max(ballPos[2] + 3, -LANE_LENGTH / 2 + 5);
+        const targetZ = Math.max(ballPos[2] + 3, DECK_VIEW_Z);
         cameraTarget.current.set(0, 1.5, targetZ);
-        cameraRef.current.position.lerp(cameraTarget.current, 0.1);
+        cameraRef.current.position.lerp(cameraTarget.current, easeFactor(CAMERA_FOLLOW_K, delta));
         cameraRef.current.lookAt(0, 0, -LANE_LENGTH / 2);
       }
 
@@ -329,10 +361,18 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
           audioEngine.stopRoll();
         }
       }
+    } else if (performance.now() < cameraHoldUntil.current) {
+      // Stay down at the pin deck while the rack is cleared and reset, so the
+      // sweep is actually watched rather than happening off in the distance
+      // behind a camera already on its way back.
+      cameraTarget.current.set(0, 1.5, DECK_VIEW_Z);
+      cameraRef.current.position.lerp(cameraTarget.current, easeFactor(CAMERA_FOLLOW_K, delta));
+      cameraRef.current.lookAt(0, 0, -LANE_LENGTH / 2);
     } else {
-      // Reset camera
+      // Ease back to the foul line. Slow enough that the tail of the reset is
+      // still visible as the camera pulls away.
       cameraTarget.current.set(0, 2, 11);
-      cameraRef.current.position.lerp(cameraTarget.current, 0.1);
+      cameraRef.current.position.lerp(cameraTarget.current, easeFactor(CAMERA_RETURN_K, delta));
       cameraRef.current.lookAt(0, 0, 0);
     }
 
@@ -403,6 +443,11 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
       } else if (fullRack) {
         // Clear the whole deck as a wave, run the sweeper across it, then beam
         // a fresh rack back in behind it.
+        //
+        // Hold the camera at the deck for the clear and the sweeper pass, then
+        // let it start easing back while the fresh pins beam in — so the last
+        // thing you see as you pull away is the rack coming back.
+        cameraHoldUntil.current = performance.now() + RACK_CLEAR_MS + DECK_HOLD_TAIL_MS;
         audioEngine.playSweep();
         triggerSweep();
         pinRefs.current.forEach((p, i) => p?.derez(i * DEREZ_STAGGER_MS));
@@ -412,7 +457,7 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
             p?.materialize(i * MATERIALIZE_STAGGER_MS);
           });
         }, RACK_CLEAR_MS);
-        handoverDelay = RACK_RESET_MS;
+        handoverDelay = Math.max(RACK_RESET_MS, SWEEP_HANDOVER_MS);
       } else {
         // Between rolls only the downed pins are swept away; the standing ones
         // have to stay exactly where they are for the spare attempt.
@@ -424,12 +469,13 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
           }
         });
         if (order > 0) {
+          cameraHoldUntil.current = performance.now() + RACK_CLEAR_MS + DECK_HOLD_TAIL_MS;
           audioEngine.playSweep();
           triggerSweep();
           setTimeout(() => {
             pinRefs.current.forEach(p => { if (p?.isFallen()) p.hide(); });
           }, RACK_CLEAR_MS);
-          handoverDelay = Math.max(NEXT_TURN_DELAY_MS, RACK_CLEAR_MS + 200);
+          handoverDelay = Math.max(NEXT_TURN_DELAY_MS, SWEEP_HANDOVER_MS);
         }
       }
 
