@@ -47,6 +47,15 @@ const NEXT_TURN_DELAY_MS = 900;
 /** Give up on a roll that never reaches the pins. */
 const ROLL_TIMEOUT_S = 6;
 
+/**
+ * Add ?debug=1 to the URL to publish live ball and pin state on
+ * `window.__bowl`. Physics problems here are invisible from the outside — a
+ * body at a NaN position simply stops being drawn — so having a way to read
+ * the actual numbers beats inferring them from screenshots.
+ */
+const DEBUG =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
+
 function FloatingTriangles() {
   const reduceMotion = useStore((s) => s.reduceMotion);
 
@@ -252,6 +261,23 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
 
   useFrame((_, delta) => {
     if (!cameraRef.current) return;
+
+    if (DEBUG) {
+      const bp = ballRef.current?.getPosition();
+      (window as any).__bowl = {
+        playState,
+        rollTimer: +rollTimer.current.toFixed(2),
+        wasGutter: wasGutter.current,
+        ball: bp ? bp.map((n) => +n.toFixed(2)) : null,
+        ballSpeed: +(ballRef.current?.getSpeed() ?? -1).toFixed(2),
+        aimAngle: +useStore.getState().aimAngle.toFixed(3),
+        powerLevel: +useStore.getState().powerLevel.toFixed(1),
+        spinAmount: +useStore.getState().spinAmount.toFixed(3),
+        pins: pinRefs.current.map((p) =>
+          p ? { y: +p.getPosition()[1].toFixed(2), z: +p.getPosition()[2].toFixed(2), fallen: p.isFallen() } : null
+        ),
+      };
+    }
 
     if (playState === 'rolling' || playState === 'scoring') {
       const ballPos = ballRef.current?.getPosition();

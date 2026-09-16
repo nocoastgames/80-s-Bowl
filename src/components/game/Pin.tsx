@@ -157,7 +157,7 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
         animBoost = p * 16;
         if (beamMatRef.current && beamRef.current) {
           beamRef.current.visible = true;
-          beamMatRef.current.opacity = Math.sin(Math.PI * p) * 0.55;
+          beamMatRef.current.opacity = Math.sin(Math.PI * p) * 0.3;
         }
         if (p >= 1) {
           vis.visible = false;
@@ -176,7 +176,7 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
         animBoost = (1 - p) * 16;
         if (beamMatRef.current && beamRef.current) {
           beamRef.current.visible = true;
-          beamMatRef.current.opacity = (1 - p) * 0.6;
+          beamMatRef.current.opacity = (1 - p) * 0.35;
         }
         if (p >= 1) {
           vis.scale.setScalar(PIN_SCALE);
@@ -278,8 +278,8 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
       {/* Column of light the pin travels in and out on. Sits outside the
           scaled visual group so it keeps its full height while the pin
           itself is collapsing. */}
-      <mesh ref={beamRef} position={[0, 0.6, 0]} visible={false}>
-        <cylinderGeometry args={[0.17, 0.17, 3.2, 12, 1, true]} />
+      <mesh ref={beamRef} position={[0, 0.35, 0]} visible={false}>
+        <cylinderGeometry args={[0.13, 0.13, 1.5, 10, 1, true]} />
         <meshBasicMaterial
           ref={beamMatRef}
           color={colors.blob}
