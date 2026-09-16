@@ -133,17 +133,32 @@ function PhysicsMaterials() {
 }
 
 function ContactPairBinding({ pair }: { pair: ContactPair }) {
-  useContactMaterial(
-    pair.a,
-    pair.b,
-    {
+  // Only include the solver tuning keys when the pair actually sets them.
+  //
+  // cannon-es fills its defaults with `if (!(key in options))`, and a key
+  // passed explicitly as `undefined` still satisfies `in`. Sending
+  // `contactEquationStiffness: undefined` therefore *suppressed* the default
+  // instead of requesting it, and the solver went on to compute its Spook
+  // parameters from undefined. That produced NaN, which spread through the
+  // contacts into every dynamic body — the ball and all ten pins ended up at
+  // NaN positions, so they vanished, collided with nothing, and could never
+  // register as knocked down. The static lane was unaffected, which is why
+  // only half the scene looked broken.
+  const options = useMemo(() => {
+    const o: Record<string, number> = {
       friction: pair.friction,
       restitution: pair.restitution,
-      contactEquationStiffness: pair.contactEquationStiffness,
-      contactEquationRelaxation: pair.contactEquationRelaxation,
-    },
-    []
-  );
+    };
+    if (pair.contactEquationStiffness !== undefined) {
+      o.contactEquationStiffness = pair.contactEquationStiffness;
+    }
+    if (pair.contactEquationRelaxation !== undefined) {
+      o.contactEquationRelaxation = pair.contactEquationRelaxation;
+    }
+    return o;
+  }, [pair]);
+
+  useContactMaterial(pair.a, pair.b, options, []);
   return null;
 }
 
