@@ -44,21 +44,24 @@ const MAX_SETTLE_S = 3.4;
 const NEXT_TURN_DELAY_MS = 900;
 
 /**
- * Camera easing, as exponential rates rather than a fixed per-frame fraction,
- * so the motion is the same on a 144Hz monitor as on a 30fps Chromebook.
+ * Camera smooth times, in seconds — roughly how long each move takes. Driven
+ * against frame delta, so a move takes the same real time on a 144Hz monitor
+ * as on a Chromebook running at 30.
  */
-const CAMERA_FOLLOW_K = 6.5;
+const CAMERA_FOLLOW_SMOOTH = 0.22;
 /**
- * Deliberately about three times slower than the follow. The camera used to
+ * Deliberately far slower than the follow. The camera used to
  * snap back the instant scoring ended, which meant it was retreating up the
  * lane exactly while the pins were being swept — the animation played to
  * nobody.
  */
-const CAMERA_RETURN_K = 2.2;
+const CAMERA_RETURN_SMOOTH = 0.85;
 /** Closest the follow camera gets to the pin deck; also the "watch it" view. */
 const DECK_VIEW_Z = -LANE_LENGTH / 2 + 5;
 /** Extra time held at the deck after the sweep, before pulling back. */
 const DECK_HOLD_TAIL_MS = 300;
+/** Settling at the deck once the ball has gone. */
+const CAMERA_DECK_SMOOTH = 0.4;
 /**
  * How much of the camera's journey back to the foul line to wait out before
  * handing control over. Without this the next bowler gets the switch while the
@@ -68,9 +71,38 @@ const CAMERA_RETURN_SETTLE_MS = 800;
 /** Total pause when a sweep runs: watch it, then ride the camera back. */
 const SWEEP_HANDOVER_MS = RACK_CLEAR_MS + DECK_HOLD_TAIL_MS + CAMERA_RETURN_SETTLE_MS;
 
-/** Frame-rate independent lerp factor for an exponential approach. */
-function easeFactor(k: number, delta: number) {
-  return 1 - Math.exp(-k * Math.min(delta, 0.1));
+/**
+ * Critically damped spring, the standard smooth-camera move.
+ *
+ * An exponential lerp is at its fastest on the very first frame, so a camera
+ * starting from rest lurches and then crawls. This carries velocity instead,
+ * so it eases out of rest, accelerates, and settles without overshooting —
+ * and because the velocity persists across target changes, switching targets
+ * mid-move bends the path rather than snapping it.
+ *
+ * Mutates `current` and `velocity` in place. `smoothTime` is roughly how long
+ * the move takes.
+ */
+const SMOOTH_AXES = ['x', 'y', 'z'] as const;
+
+function smoothDamp(
+  current: Vector3,
+  target: Vector3,
+  velocity: Vector3,
+  smoothTime: number,
+  delta: number
+) {
+  const dt = Math.min(delta, 0.1);
+  const omega = 2 / Math.max(0.0001, smoothTime);
+  const x = omega * dt;
+  const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+
+  for (const axis of SMOOTH_AXES) {
+    const change = current[axis] - target[axis];
+    const temp = (velocity[axis] + omega * change) * dt;
+    velocity[axis] = (velocity[axis] - omega * temp) * decay;
+    current[axis] = target[axis] + (change + temp) * decay;
+  }
 }
 /** Give up on a roll that never reaches the pins. */
 const ROLL_TIMEOUT_S = 6;
@@ -267,7 +299,14 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
   const fallenPinsThisRoll = useRef<Set<number>>(new Set());
   const wasGutter = useRef(false);
   const gutterTimer = useRef(0);
-  const cameraTarget = useRef(new Vector3());
+  const cameraTarget = useRef(new Vector3(0, 2, 11));
+  const cameraVelocity = useRef(new Vector3());
+  /** Point the camera is aiming at, eased rather than set directly. */
+  const cameraLook = useRef(new Vector3(0, 0, 0));
+  const cameraLookTarget = useRef(new Vector3(0, 0, 0));
+  const cameraLookVelocity = useRef(new Vector3());
+  /** Smooth time in play this frame; each branch picks its own pace. */
+  const cameraSmooth = useRef(CAMERA_RETURN_SMOOTH);
   /** Keep the camera at the pin deck until this timestamp. */
   const cameraHoldUntil = useRef(0);
 
@@ -326,8 +365,8 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
       if (ballPos) {
         const targetZ = Math.max(ballPos[2] + 3, DECK_VIEW_Z);
         cameraTarget.current.set(0, 1.5, targetZ);
-        cameraRef.current.position.lerp(cameraTarget.current, easeFactor(CAMERA_FOLLOW_K, delta));
-        cameraRef.current.lookAt(0, 0, -LANE_LENGTH / 2);
+        cameraLookTarget.current.set(0, 0, -LANE_LENGTH / 2);
+        cameraSmooth.current = CAMERA_FOLLOW_SMOOTH;
       }
 
       if (playState === 'rolling') {
@@ -366,15 +405,26 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
       // sweep is actually watched rather than happening off in the distance
       // behind a camera already on its way back.
       cameraTarget.current.set(0, 1.5, DECK_VIEW_Z);
-      cameraRef.current.position.lerp(cameraTarget.current, easeFactor(CAMERA_FOLLOW_K, delta));
-      cameraRef.current.lookAt(0, 0, -LANE_LENGTH / 2);
+      cameraLookTarget.current.set(0, 0, -LANE_LENGTH / 2);
+      cameraSmooth.current = CAMERA_DECK_SMOOTH;
     } else {
       // Ease back to the foul line. Slow enough that the tail of the reset is
       // still visible as the camera pulls away.
       cameraTarget.current.set(0, 2, 11);
-      cameraRef.current.position.lerp(cameraTarget.current, easeFactor(CAMERA_RETURN_K, delta));
-      cameraRef.current.lookAt(0, 0, 0);
+      cameraLookTarget.current.set(0, 0, 0);
+      cameraSmooth.current = CAMERA_RETURN_SMOOTH;
     }
+
+    // One spring for position and one for the look target, driven every frame
+    // regardless of which branch set them.
+    //
+    // The look target used to be snapped with a direct lookAt per branch, so
+    // the instant the camera stopped following the ball its aim cut from the
+    // pins to the middle of the lane in a single frame. The position glided
+    // and the orientation jumped, which is what made the move feel harsh.
+    smoothDamp(cameraRef.current.position, cameraTarget.current, cameraVelocity.current, cameraSmooth.current, delta);
+    smoothDamp(cameraLook.current, cameraLookTarget.current, cameraLookVelocity.current, cameraSmooth.current, delta);
+    cameraRef.current.lookAt(cameraLook.current);
 
     if (playState !== 'scoring') return;
 
