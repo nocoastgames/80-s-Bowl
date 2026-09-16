@@ -18,6 +18,8 @@ export interface PinRef {
   getPosition: () => [number, number, number];
   getRotation: () => [number, number, number];
   getSpeed: () => number;
+  /** Horizontal distance from this pin's home spot. */
+  getDisplacement: () => number;
   /** Has this pin stopped moving *and* stopped rotating? */
   isSettled: () => boolean;
   isFallen: () => boolean;
@@ -43,6 +45,17 @@ function easeOutBack(p: number) {
 export const FALLEN_ANGLE = 1.0;
 /** Smaller tilt, used to notice a pin has *started* to go over (for the sfx). */
 export const TIPPING_ANGLE = 0.3;
+/**
+ * Horizontal distance a pin can be shoved off its spot before it counts as
+ * knocked down, even if it somehow stayed upright.
+ *
+ * Spots are 0.5 apart within a row, so this is most of the way to the next
+ * one — far enough that a nudge or a wobble doesn't count, close enough that
+ * a pin punted across the deck does. Tilt alone used to miss these: a pin
+ * sent skidding off its spot but still standing scored as if it were
+ * untouched, which is not what anybody watching it would say happened.
+ */
+export const FALLEN_DISPLACEMENT = 0.35;
 
 const UP = new Vector3(0, 1, 0);
 
@@ -195,7 +208,13 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
 
     if (!glowMaterialRef.current) return;
 
-    const isFallen = tiltAngle(rot.current) > FALLEN_ANGLE || pos.current[1] < 0;
+    // Same rule the scoring uses, so a pin that counts as down also stops
+    // glowing rather than sitting there lit up like it's still in play.
+    const isFallen =
+      tiltAngle(rot.current) > FALLEN_ANGLE ||
+      pos.current[1] < 0 ||
+      Math.hypot(pos.current[0] - position[0], pos.current[2] - position[2]) >
+        FALLEN_DISPLACEMENT;
     const reduceMotion = useStore.getState().reduceMotion;
 
     if (reduceMotion) {
@@ -275,6 +294,8 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
     },
     getPosition: () => pos.current,
     getRotation: () => rot.current,
+    getDisplacement: () =>
+      Math.hypot(pos.current[0] - position[0], pos.current[2] - position[2]),
     getSpeed: () => Math.hypot(vel.current[0], vel.current[1], vel.current[2]),
     isSettled: () => {
       // Angular velocity is the important half. A pin going over rotates
@@ -284,7 +305,11 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
       const angular = Math.hypot(angVel.current[0], angVel.current[1], angVel.current[2]);
       return linear < 0.12 && angular < 0.3;
     },
-    isFallen: () => tiltAngle(rot.current) > FALLEN_ANGLE || pos.current[1] < 0,
+    isFallen: () =>
+      tiltAngle(rot.current) > FALLEN_ANGLE ||
+      pos.current[1] < 0 ||
+      Math.hypot(pos.current[0] - position[0], pos.current[2] - position[2]) >
+        FALLEN_DISPLACEMENT,
     isTipping: () => tiltAngle(rot.current) > TIPPING_ANGLE || pos.current[1] < 0,
   }));
 

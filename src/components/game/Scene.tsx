@@ -280,6 +280,7 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
                 // threshold and still rotating is the signature of a rack
                 // counted before it finished falling.
                 tilt: +((tiltAngle(p.getRotation()) * 180) / Math.PI).toFixed(1),
+                displaced: +p.getDisplacement().toFixed(2),
                 fallen: p.isFallen(),
                 settled: p.isSettled(),
               }

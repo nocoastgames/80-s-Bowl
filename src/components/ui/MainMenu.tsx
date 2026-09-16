@@ -9,6 +9,7 @@ export function MainMenu() {
   const sweepSpeed = useStore((s) => s.sweepSpeed);
   const autoAssistMs = useStore((s) => s.autoAssistMs);
   const bumpersEnabled = useStore((s) => s.bumpersEnabled);
+  const reduceMotion = useStore((s) => s.reduceMotion);
 
   const [showSettings, setShowSettings] = useState(false);
 
@@ -46,7 +47,20 @@ export function MainMenu() {
         <span className="text-[#aaa]">Speed: <strong className="text-white">{speedLabel}</strong></span>
         <span className="text-[#aaa]">Bumpers: <strong className="text-white">{bumpersEnabled ? 'On' : 'Off'}</strong></span>
         <span className="text-[#aaa]">Auto-Assist: <strong className="text-white">{autoAssistMs > 0 ? `${autoAssistMs / 1000}s` : 'Off'}</strong></span>
+        {/* Reduce Motion belongs here because it turns animations off across
+            the whole game and defaults from the operating system, so it can be
+            on without anyone having chosen it. Left out of this row, it just
+            looks like the animations are broken. */}
+        <span className="text-[#aaa]">Reduce Motion: <strong className={reduceMotion ? 'text-warn' : 'text-white'}>{reduceMotion ? 'On' : 'Off'}</strong></span>
       </div>
+
+      {reduceMotion && (
+        <p className="text-warn/90 text-sm mb-6 text-center max-w-xl">
+          Reduce Motion is on, so animations are turned off &mdash; including the
+          pin sweep and reset. It follows your device&rsquo;s animation setting by
+          default. Turn it off below to see them.
+        </p>
+      )}
 
       <button
         onClick={(e) => { e.stopPropagation(); setShowSettings(true); }}
