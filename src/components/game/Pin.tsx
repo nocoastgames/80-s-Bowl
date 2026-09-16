@@ -3,6 +3,7 @@ import { forwardRef, useImperativeHandle, useRef, useEffect, useMemo } from 'rea
 import * as THREE from 'three';
 import { MeshStandardMaterial, Vector3, Euler } from 'three';
 import { useFrame } from '@react-three/fiber';
+import { useStore } from '../../store';
 
 interface PinProps {
   position: [number, number, number];
@@ -14,6 +15,27 @@ export interface PinRef {
   hide: () => void;
   getPosition: () => [number, number, number];
   getRotation: () => [number, number, number];
+  getSpeed: () => number;
+  isFallen: () => boolean;
+  /** Has started to go over — used to sound the hit the moment it happens. */
+  isTipping: () => boolean;
+}
+
+/** Tilt past this angle (radians) and the pin counts as knocked down. */
+export const FALLEN_ANGLE = 1.0;
+/** Smaller tilt, used to notice a pin has *started* to go over (for the sfx). */
+export const TIPPING_ANGLE = 0.3;
+
+const UP = new Vector3(0, 1, 0);
+
+/** Shared scratch objects — avoids allocating a Vector3/Euler every frame. */
+const scratchEuler = new Euler();
+const scratchVec = new Vector3();
+
+export function tiltAngle(rot: [number, number, number]): number {
+  scratchEuler.set(rot[0], rot[1], rot[2]);
+  scratchVec.set(0, 1, 0).applyEuler(scratchEuler);
+  return scratchVec.angleTo(UP);
 }
 
 export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
@@ -56,6 +78,7 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
 
   const pos = useRef<[number, number, number]>(position);
   const rot = useRef<[number, number, number]>([0, 0, 0]);
+  const vel = useRef<[number, number, number]>([0, 0, 0]);
   const glowMaterialRef = useRef<MeshStandardMaterial>(null);
   const blobsRef = useRef<THREE.Group>(null);
 
@@ -68,9 +91,10 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
     ];
   }, []);
 
-  // Track position and rotation for scoring
+  // Track position, rotation and speed for scoring and settle detection
   api.position.subscribe((p) => (pos.current = p));
   api.rotation.subscribe((r) => (rot.current = r));
+  api.velocity.subscribe((v) => (vel.current = v));
 
   // Force sleep on mount so they don't wobble
   useEffect(() => {
@@ -81,30 +105,35 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
   }, [api]);
 
   useFrame((state) => {
-    if (glowMaterialRef.current) {
-      const euler = new Euler(rot.current[0], rot.current[1], rot.current[2]);
-      const currentUp = new Vector3(0, 1, 0).applyEuler(euler);
-      const angle = currentUp.angleTo(new Vector3(0, 1, 0));
-      const isFallen = angle > 1.0 || pos.current[1] < 0;
-      
-      const t = state.clock.elapsedTime;
-      const pulsing = Math.sin(t * 3) * 0.8; // pulsing glow effect
-      glowMaterialRef.current.emissiveIntensity = isFallen ? 0 : 3.0 + pulsing;
-      glowMaterialRef.current.opacity = isFallen ? 0.2 : 0.6; 
+    if (!glowMaterialRef.current) return;
 
-      if (!isFallen && blobsRef.current) {
-        blobsRef.current.children.forEach((blob, i) => {
-          const offset = blobOffsets[i];
-          const y = Math.sin(t * 1.5 + offset) * 0.08;
-          const x = Math.sin(t * 2.1 + offset * 2) * 0.01;
-          const z = Math.cos(t * 1.8 + offset * 3) * 0.01;
-          blob.position.set(x, y, z);
-          
-          // Blob pulsing effect
-          const scale = 1 + Math.sin(t * 3 + offset) * 0.3;
-          blob.scale.set(scale, scale, scale);
-        });
-      }
+    const isFallen = tiltAngle(rot.current) > FALLEN_ANGLE || pos.current[1] < 0;
+    const reduceMotion = useStore.getState().reduceMotion;
+
+    if (reduceMotion) {
+      // Steady glow, no pulsing and no drifting blobs.
+      glowMaterialRef.current.emissiveIntensity = isFallen ? 0 : 3.0;
+      glowMaterialRef.current.opacity = isFallen ? 0.2 : 0.6;
+      return;
+    }
+
+    const t = state.clock.elapsedTime;
+    const pulsing = Math.sin(t * 3) * 0.8; // pulsing glow effect
+    glowMaterialRef.current.emissiveIntensity = isFallen ? 0 : 3.0 + pulsing;
+    glowMaterialRef.current.opacity = isFallen ? 0.2 : 0.6;
+
+    if (!isFallen && blobsRef.current) {
+      blobsRef.current.children.forEach((blob, i) => {
+        const offset = blobOffsets[i];
+        const y = Math.sin(t * 1.5 + offset) * 0.08;
+        const x = Math.sin(t * 2.1 + offset * 2) * 0.01;
+        const z = Math.cos(t * 1.8 + offset * 3) * 0.01;
+        blob.position.set(x, y, z);
+
+        // Blob pulsing effect
+        const scale = 1 + Math.sin(t * 3 + offset) * 0.3;
+        blob.scale.set(scale, scale, scale);
+      });
     }
   });
 
@@ -114,7 +143,7 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
       api.rotation.set(0, 0, 0);
       api.velocity.set(0, 0, 0);
       api.angularVelocity.set(0, 0, 0);
-      
+
       // Briefly wake to register position, then sleep to prevent wobble
       api.wakeUp();
       setTimeout(() => api.sleep(), 50);
@@ -127,6 +156,9 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
     },
     getPosition: () => pos.current,
     getRotation: () => rot.current,
+    getSpeed: () => Math.hypot(vel.current[0], vel.current[1], vel.current[2]),
+    isFallen: () => tiltAngle(rot.current) > FALLEN_ANGLE || pos.current[1] < 0,
+    isTipping: () => tiltAngle(rot.current) > TIPPING_ANGLE || pos.current[1] < 0,
   }));
 
   return (
@@ -142,13 +174,13 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
         <group position={[0, 0.2, 0]}>
           <mesh>
             <cylinderGeometry args={[0.03, 0.06, 0.2, 16]} />
-            <meshStandardMaterial 
+            <meshStandardMaterial
               ref={glowMaterialRef}
-              color={colors.main} 
-              emissive={colors.main} 
-              emissiveIntensity={0.8} 
-              transparent 
-              opacity={0.5} 
+              color={colors.main}
+              emissive={colors.main}
+              emissiveIntensity={0.8}
+              transparent
+              opacity={0.5}
             />
           </mesh>
           <group ref={blobsRef}>

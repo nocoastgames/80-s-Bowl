@@ -6,23 +6,50 @@ import { GameplayOverlay } from './components/ui/GameplayOverlay';
 import { Results } from './components/ui/Results';
 import { PauseMenu } from './components/ui/PauseMenu';
 import { useStore } from './store';
+import { audioEngine } from './lib/audio';
 import { useEffect } from 'react';
+
+/** True when the user is typing, so shortcuts must not steal the keystroke. */
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    el.isContentEditable === true
+  );
+}
 
 export default function App() {
   const gameState = useStore((state) => state.gameState);
   const setPaused = useStore((state) => state.setPaused);
-  const isPaused = useStore((state) => state.isPaused);
+  const reduceMotion = useStore((state) => state.reduceMotion);
+
+  // Drive the reduced-motion CSS from a class on <html> so plain CSS
+  // animations can be switched off alongside the React-driven ones.
+  useEffect(() => {
+    document.documentElement.classList.toggle('reduce-motion', reduceMotion);
+  }, [reduceMotion]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const state = useStore.getState();
-      
+
       if (e.key === 'Escape' || e.code === 'Escape') {
         if (state.gameState === 'playing') {
           setPaused(!state.isPaused);
         }
+        return;
       }
-      
+
+      // Number keys switch radio stations — but not while someone is typing a
+      // player name. Adding "Player 1" to the roster used to change the station
+      // partway through the word.
+      if (isTypingTarget(e.target)) return;
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
       let parsedNum = -1;
       if (e.code && e.code.startsWith('Digit')) {
         parsedNum = parseInt(e.code.replace('Digit', ''));
@@ -33,21 +60,19 @@ export default function App() {
         parsedNum = parseInt(e.key);
       }
 
-      if (parsedNum !== -1) {
-        const stationIndex = parsedNum - 1; // 0 becomes -1
-        state.setCurrentStationIndex(stationIndex);
-        if (state.gameState === 'playing') {
-           // update audio engine stream immediately if playing
-           import('./lib/audio').then(({ audioEngine }) => {
-               if (stationIndex === -1) {
-                   audioEngine.stopBGM();
-               } else {
-                   audioEngine.playBGM(stationIndex);
-               }
-           });
+      if (parsedNum === -1 || Number.isNaN(parsedNum)) return;
+
+      const stationIndex = parsedNum - 1; // 0 becomes -1, i.e. radio off
+      state.setCurrentStationIndex(stationIndex);
+      if (state.gameState === 'playing') {
+        if (stationIndex === -1) {
+          audioEngine.stopBGM();
+        } else {
+          audioEngine.playBGM(stationIndex);
         }
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [setPaused]);
@@ -64,7 +89,7 @@ export default function App() {
       {gameState === 'setup' && <TournamentSetup />}
       {gameState === 'playing' && <GameplayOverlay />}
       {gameState === 'results' && <Results />}
-      
+
       <PauseMenu />
     </div>
   );

@@ -1,7 +1,6 @@
 import { useSphere } from '@react-three/cannon';
 import { useFrame } from '@react-three/fiber';
 import { forwardRef, useImperativeHandle, useRef } from 'react';
-import { Mesh, Vector3 } from 'three';
 import { useStore } from '../../store';
 import { audioEngine } from '../../lib/audio';
 
@@ -9,6 +8,7 @@ export interface BallRef {
   reset: () => void;
   roll: (angle: number, power: number) => void;
   getPosition: () => [number, number, number];
+  getSpeed: () => number;
 }
 
 const START_POS: [number, number, number] = [0, 0.3, 9];
@@ -23,7 +23,9 @@ export const Ball = forwardRef<BallRef, {}>((_, ref) => {
   }));
 
   const pos = useRef<[number, number, number]>(START_POS);
+  const vel = useRef<[number, number, number]>([0, 0, 0]);
   api.position.subscribe((p) => (pos.current = p));
+  api.velocity.subscribe((v) => (vel.current = v));
 
   useFrame(() => {
     const state = useStore.getState();
@@ -50,27 +52,34 @@ export const Ball = forwardRef<BallRef, {}>((_, ref) => {
     roll: (angle: number, power: number) => {
       // power is 0 to 100
       const force = 5 + (power / 100) * 15; // Base force + power multiplier
-      
+
       // Calculate velocity vector based on angle
       // Angle is in radians, 0 is straight down the lane (-z)
       // We negate Math.sin(angle) so that a positive angle (arrow pointing left) results in negative X velocity (moving left)
       const vx = -Math.sin(angle) * force;
       const vz = -Math.cos(angle) * force;
-      
+
       api.wakeUp();
       api.velocity.set(vx, 0, vz);
       // Add some forward spin
       api.angularVelocity.set(-force / 2, 0, 0);
-      
+
       audioEngine.startRoll();
     },
     getPosition: () => pos.current,
+    getSpeed: () => Math.hypot(vel.current[0], vel.current[1], vel.current[2]),
   }));
 
   return (
     <mesh ref={ballRef as any} castShadow receiveShadow>
       <sphereGeometry args={[0.25, 32, 32]} />
-      <meshStandardMaterial color="#1a5f7a" roughness={0.2} metalness={0.8} />
+      <meshStandardMaterial
+        color="#1a5f7a"
+        emissive="#00f2ff"
+        emissiveIntensity={0.25}
+        roughness={0.2}
+        metalness={0.8}
+      />
     </mesh>
   );
 });

@@ -1,6 +1,6 @@
 {
   "name": "Switch Strike Bowling",
-  "description": "A single-switch accessible 3D bowling game with tournament support.",
+  "description": "A single-switch accessible 3D bowling game for the classroom, with per-student settings, class rosters and score export.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

@@ -14,8 +14,8 @@
 body {
   background-color: var(--color-bg-dark);
   color: #ffffff;
-  background-image: 
-    linear-gradient(45deg, #ff00ff 25%, transparent 25%, transparent 75%, #00f2ff 75%, #00f2ff), 
+  background-image:
+    linear-gradient(45deg, #ff00ff 25%, transparent 25%, transparent 75%, #00f2ff 75%, #00f2ff),
     linear-gradient(45deg, #ff00ff 25%, transparent 25%, transparent 75%, #00f2ff 75%, #00f2ff);
   background-size: 100px 100px;
   background-position: 0 0, 50px 50px;
@@ -26,4 +26,65 @@ body {
 @keyframes bgScroll {
   from { background-position: 0 0, 50px 50px; }
   to { background-position: 100px 100px, 150px 150px; }
+}
+
+@keyframes celebrate {
+  0%   { transform: scale(0.6); opacity: 0; }
+  20%  { transform: scale(1.15); opacity: 1; }
+  35%  { transform: scale(1); }
+  80%  { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.05); opacity: 0; }
+}
+
+.animate-celebrate {
+  animation: celebrate 2.2s ease-out forwards;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 242, 255, 0.4);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 242, 255, 0.7);
+}
+
+/*
+ * Reduced motion.
+ *
+ * The scrolling checkerboard, the marquee and the pulsing glows are a real
+ * barrier for light-sensitive and easily-overstimulated students — which is a
+ * large share of who this game is for. The toggle kills the animation outright
+ * rather than slowing it down, and keeps a flat background instead.
+ */
+html.reduce-motion body {
+  animation: none;
+  background-image: none;
+  background-color: var(--color-bg-dark);
+}
+
+html.reduce-motion .animate-celebrate {
+  animation: none;
+}
+
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* Keep keyboard focus obvious — a teacher tabbing through setup needs to see
+   where they are, and the default ring is easy to lose on this background. */
+:focus-visible {
+  outline: 3px solid var(--color-warn);
+  outline-offset: 2px;
 }

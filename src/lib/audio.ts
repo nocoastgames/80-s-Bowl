@@ -100,12 +100,16 @@ class RetroAudioEngine {
   }
 
   stopBGM() {
-     if (this.bgmAudio) {
-         this.bgmAudio.pause();
-         this.isPlayingBgm = false;
-         this.bgmAudio.src = ''; // Clean up stream
-         this.bgmAudio = null;
-     }
+    if (!this.bgmAudio) return;
+    this.bgmAudio.pause();
+    this.isPlayingBgm = false;
+    // Drop the stream but keep the <audio> element and its
+    // MediaElementAudioSourceNode alive. An element can only ever be turned
+    // into a source node once, so throwing the element away here meant that
+    // after any stop the next station played *outside* the analyser graph and
+    // the EQ display went dead.
+    this.bgmAudio.removeAttribute('src');
+    this.bgmAudio.load();
   }
 
   playNote(midiNote: number, time: number, duration: number) {
@@ -222,6 +226,68 @@ class RetroAudioEngine {
     noiseFilter.connect(noiseGain);
     noiseGain.connect(ctx.destination);
     noise.start();
+  }
+
+  /** Hollow descending blip for a ball that drops into the gutter. */
+  playGutter() {
+    if (!this.ctx) this.init();
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(320, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 0.5);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.28 * this.sfxVolume, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+  }
+
+  /**
+   * Rising arpeggio for a strike or spare. Deliberately short and clearly
+   * "good news" — for a lot of these students this is the main feedback that
+   * tells them something went right.
+   */
+  playCelebration(kind: 'strike' | 'spare') {
+    if (!this.ctx) this.init();
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+
+    // Major triad up to the octave for a strike, a shorter lift for a spare.
+    const notes = kind === 'strike' ? [0, 4, 7, 12, 16] : [0, 4, 7];
+    const root = kind === 'strike' ? 69 : 64; // A4 / E4
+    const step = 0.085;
+
+    notes.forEach((semitone, i) => {
+      const t = ctx.currentTime + i * step;
+      const freq = 440 * Math.pow(2, (root + semitone - 69) / 12);
+
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.16 * this.sfxVolume, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+
+      // Soften the square wave so it reads as celebratory rather than harsh.
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 2600;
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.32);
+    });
   }
 }
 

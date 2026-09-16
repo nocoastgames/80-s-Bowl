@@ -1,13 +1,14 @@
 import { Physics, useBox } from '@react-three/cannon';
-import { Environment, PerspectiveCamera, Grid, Float } from '@react-three/drei';
+import { PerspectiveCamera, Grid, Float } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useRef, useState } from 'react';
-import { Vector3, Mesh, Euler, Group } from 'three';
-import { useStore } from '../../store';
+import { useEffect, useMemo, useRef } from 'react';
+import { Vector3, Group } from 'three';
+import { useStore, useActiveSettings, getActiveSettings } from '../../store';
 import { Ball, BallRef } from './Ball';
-import { Lane, LANE_LENGTH } from './Lane';
+import { Lane, LANE_LENGTH, LANE_HALF_WIDTH, PIT_ENTRY_Z } from './Lane';
 import { Pin, PinRef } from './Pin';
 import { audioEngine } from '../../lib/audio';
+import { sweep } from '../../lib/sweep';
 
 const PIN_POSITIONS: [number, number, number][] = [
   [0, 0.45, -LANE_LENGTH / 2 + 1.2], // 1
@@ -22,17 +23,43 @@ const PIN_POSITIONS: [number, number, number][] = [
   [0.75, 0.45, -LANE_LENGTH / 2 + 0.15], // 10
 ];
 
+/** Ball centre further out than this means it has left the playing surface. */
+const GUTTER_X = LANE_HALF_WIDTH - 0.05;
+/** Once in the gutter, let it ride for a beat then score — no need to wait it out. */
+const GUTTER_LINGER_S = 1.2;
+/** Minimum time in 'scoring' before we start looking for a settled rack. */
+const MIN_SETTLE_S = 1.0;
+/** Hard cap on settling, in case something is still jittering. */
+const MAX_SETTLE_S = 2.6;
+/** Below this speed a pin counts as stopped. */
+const PIN_STILL_SPEED = 0.15;
+/** Pause between scoring and the next bowler taking control. */
+const NEXT_TURN_DELAY_MS = 900;
+/** Give up on a roll that never reaches the pins. */
+const ROLL_TIMEOUT_S = 6;
+
 function FloatingTriangles() {
-  const triangles = Array.from({ length: 20 }).map((_, i) => ({
-    position: [
-      (Math.random() - 0.5) * 40,
-      Math.random() * 10 + 2,
-      (Math.random() - 0.5) * 40 - 10
-    ] as [number, number, number],
-    rotation: [Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI] as [number, number, number],
-    scale: Math.random() * 1.5 + 0.5,
-    color: Math.random() > 0.5 ? '#ff00ff' : '#00f2ff'
-  }));
+  const reduceMotion = useStore((s) => s.reduceMotion);
+
+  const triangles = useMemo(
+    () =>
+      Array.from({ length: 20 }).map(() => ({
+        position: [
+          (Math.random() - 0.5) * 40,
+          Math.random() * 10 + 2,
+          (Math.random() - 0.5) * 40 - 10
+        ] as [number, number, number],
+        rotation: [Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI] as [number, number, number],
+        scale: Math.random() * 1.5 + 0.5,
+        color: Math.random() > 0.5 ? '#ff00ff' : '#00f2ff'
+      })),
+    []
+  );
+
+  // Drifting shapes in peripheral vision are exactly the kind of thing that
+  // makes this unusable for a light-sensitive student, so reduced motion
+  // removes them rather than just slowing them down.
+  if (reduceMotion) return null;
 
   return (
     <>
@@ -52,6 +79,8 @@ function AimGuide() {
   const groupRef = useRef<Group>(null);
   const pivotRef = useRef<Group>(null);
   const matRef = useRef<any>(null);
+  const { oneTouch } = useActiveSettings();
+  const reduceMotion = useStore((s) => s.reduceMotion);
 
   useFrame(({ clock }) => {
     const state = useStore.getState();
@@ -60,28 +89,27 @@ function AimGuide() {
       groupRef.current.visible = state.playState === 'spin' || state.playState === 'aiming';
     }
     if (pivotRef.current) {
-      pivotRef.current.rotation.y = state.playState === 'spin' ? 0 : state.aimAngle;
+      // Read the live sweep value directly — it never round-trips through the
+      // store, so aiming costs zero React renders.
+      pivotRef.current.rotation.y = state.playState === 'spin' ? 0 : sweep.aim;
     }
-    if (matRef.current && state.oneTouchMode) {
-       matRef.current.opacity = 0.6 + Math.sin(clock.elapsedTime * 6) * 0.4;
-    } else if (matRef.current) {
-       matRef.current.opacity = 0.8;
+    if (matRef.current) {
+      matRef.current.opacity =
+        oneTouch && !reduceMotion ? 0.6 + Math.sin(clock.elapsedTime * 6) * 0.4 : 0.8;
     }
   });
-
-  const oneTouchMode = useStore(s => s.oneTouchMode);
 
   return (
     <group ref={groupRef} position={[0, 0.11, 9]}>
       <group ref={pivotRef}>
         <mesh position={[0, 0, -3]}>
-          <boxGeometry args={oneTouchMode ? [0.15, 0.02, 8] : [0.05, 0.01, 6]} />
-          <meshBasicMaterial color={oneTouchMode ? "#00ff00" : "#ffff00"} transparent opacity={0.6} />
+          <boxGeometry args={oneTouch ? [0.15, 0.02, 8] : [0.05, 0.01, 6]} />
+          <meshBasicMaterial color={oneTouch ? '#00ff00' : '#ffff00'} transparent opacity={0.6} />
         </mesh>
         {/* Arrow head */}
-        <mesh position={oneTouchMode ? [0, 0, -7] : [0, 0, -6]} rotation={[-Math.PI / 2, 0, 0]}>
-          <coneGeometry args={oneTouchMode ? [0.4, 1.0, 3] : [0.15, 0.5, 3]} />
-          <meshBasicMaterial ref={matRef} color={oneTouchMode ? "#00ff00" : "#ffff00"} transparent opacity={0.8} />
+        <mesh position={oneTouch ? [0, 0, -7] : [0, 0, -6]} rotation={[-Math.PI / 2, 0, 0]}>
+          <coneGeometry args={oneTouch ? [0.4, 1.0, 3] : [0.15, 0.5, 3]} />
+          <meshBasicMaterial ref={matRef} color={oneTouch ? '#00ff00' : '#ffff00'} transparent opacity={0.8} />
         </mesh>
       </group>
     </group>
@@ -89,13 +117,15 @@ function AimGuide() {
 }
 
 function Bumpers() {
-  const { bumpersEnabled } = useStore();
-  if (!bumpersEnabled) return null;
-  
+  // Bumpers follow the *current bowler's* profile, so one game can mix students
+  // who need them with students who don't.
+  const { bumpers } = useActiveSettings();
+  if (!bumpers) return null;
+
   return (
     <>
-      <Bumper position={[-1.25, 0.1, 0]} />
-      <Bumper position={[1.25, 0.1, 0]} />
+      <Bumper position={[-1.25, 0.2, 0]} />
+      <Bumper position={[1.25, 0.2, 0]} />
     </>
   );
 }
@@ -103,69 +133,90 @@ function Bumpers() {
 function Bumper({ position }: { position: [number, number, number] }) {
   const [ref] = useBox(() => ({
     type: 'Static',
-    args: [0.1, 0.2, LANE_LENGTH],
+    args: [0.1, 0.4, LANE_LENGTH],
     position,
     material: { friction: 0.1, restitution: 0.5 }
   }));
-  
+
   return (
     <mesh ref={ref as any}>
-      <boxGeometry args={[0.1, 0.2, LANE_LENGTH]} />
+      <boxGeometry args={[0.1, 0.4, LANE_LENGTH]} />
       <meshStandardMaterial color="#ff00ff" emissive="#ff00ff" emissiveIntensity={0.5} />
     </mesh>
   );
 }
 
 function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef | null>, pinRefs: React.MutableRefObject<(PinRef | null)[]> }) {
-  const { playState, setPlayState, aimAngle, powerLevel, setPinsDown, advanceRoll, pinResetTrigger } = useStore();
+  const playState = useStore((s) => s.playState);
+  const setPlayState = useStore((s) => s.setPlayState);
+  const setPinsDown = useStore((s) => s.setPinsDown);
+  const advanceRoll = useStore((s) => s.advanceRoll);
+  const pinResetTrigger = useStore((s) => s.pinResetTrigger);
+  const gameState = useStore((s) => s.gameState);
+
   const cameraRef = useRef<any>(null);
-  const rollTimer = useRef<number>(0);
+  const rollTimer = useRef(0);
   const fallenPinsThisRoll = useRef<Set<number>>(new Set());
+  const wasGutter = useRef(false);
+  const gutterTimer = useRef(0);
+  const cameraTarget = useRef(new Vector3());
 
   useEffect(() => {
     if (pinResetTrigger > 0) {
       ballRef.current?.reset();
       pinRefs.current.forEach(p => p?.reset());
       fallenPinsThisRoll.current.clear();
-      if (playState !== 'spin' && playState !== 'scoring') {
-          // ensure playing state aligns with physical reset if needed, but the user requested reset pins
-      }
+      wasGutter.current = false;
+      gutterTimer.current = 0;
     }
   }, [pinResetTrigger]);
 
-  useFrame((state, delta) => {
+  // Clear the lane when the game ends.
+  useEffect(() => {
+    if (gameState === 'results') {
+      ballRef.current?.reset();
+      pinRefs.current.forEach(p => p?.reset());
+    }
+  }, [gameState]);
+
+  useFrame((_, delta) => {
     if (!cameraRef.current) return;
 
-    // Camera follow logic
     if (playState === 'rolling' || playState === 'scoring') {
-      if (ballRef.current) {
-        const ballPos = ballRef.current.getPosition();
+      const ballPos = ballRef.current?.getPosition();
+      if (ballPos) {
         const targetZ = Math.max(ballPos[2] + 3, -LANE_LENGTH / 2 + 5);
-        const targetY = 1.5;
-        
-        cameraRef.current.position.lerp(new Vector3(0, targetY, targetZ), 0.1);
+        cameraTarget.current.set(0, 1.5, targetZ);
+        cameraRef.current.position.lerp(cameraTarget.current, 0.1);
         cameraRef.current.lookAt(0, 0, -LANE_LENGTH / 2);
       }
 
-      // Check if rolling is done (ball is far down the lane or stopped)
       if (playState === 'rolling') {
         rollTimer.current += delta;
-        const ballPos = ballRef.current?.getPosition();
-        
-        // Play strike sound when pins start to fall
+
+        // Sound each pin the moment it starts to tip.
         pinRefs.current.forEach((pin, idx) => {
           if (!pin || fallenPinsThisRoll.current.has(idx)) return;
-          const rot = pin.getRotation();
-          const euler = new Euler(rot[0], rot[1], rot[2]);
-          const currentUp = new Vector3(0, 1, 0).applyEuler(euler);
-          if (currentUp.angleTo(new Vector3(0, 1, 0)) > 0.3) {
+          if (pin.isTipping()) {
             fallenPinsThisRoll.current.add(idx);
             audioEngine.playStrike();
           }
         });
-        
-        // If ball is past pins or 8 seconds have passed
-        if ((ballPos && ballPos[2] < -LANE_LENGTH / 2 - 1) || rollTimer.current > 8) {
+
+        // Gutter: the ball has left the playing surface. The deepened gutters
+        // mean it physically can't reach the pins from here, so there's nothing
+        // left to watch — let it ride briefly, then score it.
+        if (ballPos && Math.abs(ballPos[0]) > GUTTER_X && ballPos[1] < 0.1) {
+          if (!wasGutter.current) {
+            wasGutter.current = true;
+            gutterTimer.current = 0;
+            audioEngine.playGutter();
+          }
+        }
+        if (wasGutter.current) gutterTimer.current += delta;
+
+        const reachedPit = !!ballPos && ballPos[2] < PIT_ENTRY_Z;
+        if (reachedPit || rollTimer.current > ROLL_TIMEOUT_S || gutterTimer.current > GUTTER_LINGER_S) {
           setPlayState('scoring');
           rollTimer.current = 0;
           audioEngine.stopRoll();
@@ -173,112 +224,104 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
       }
     } else {
       // Reset camera
-      cameraRef.current.position.lerp(new Vector3(0, 2, 11), 0.1);
+      cameraTarget.current.set(0, 2, 11);
+      cameraRef.current.position.lerp(cameraTarget.current, 0.1);
       cameraRef.current.lookAt(0, 0, 0);
     }
 
-    // Scoring logic
-    if (playState === 'scoring') {
-      rollTimer.current += delta;
-      
-      // Wait 3 seconds for pins to settle
-      if (rollTimer.current > 3) {
-        let downCount = 0;
-        pinRefs.current.forEach((pin) => {
-          if (!pin) return;
-          const rot = pin.getRotation();
-          const pos = pin.getPosition();
-          
-          // Check if pin is knocked over using up vector
-          const euler = new Euler(rot[0], rot[1], rot[2]);
-          const currentUp = new Vector3(0, 1, 0).applyEuler(euler);
-          const angle = currentUp.angleTo(new Vector3(0, 1, 0));
-          
-          const isFallen = angle > 1.0 || pos[1] < 0;
-          if (isFallen) downCount++;
-        });
-        
-        setPinsDown(downCount);
-        
-        const { currentFrame, currentRoll, playerFrames, players, currentPlayerIndex, totalFrames } = useStore.getState();
-        const playerId = players[currentPlayerIndex].id;
-        const frame = playerFrames[playerId][currentFrame];
-        
-        let pinsThisRoll = downCount;
-        if (currentRoll === 2 && currentFrame < totalFrames - 1) {
-          pinsThisRoll = Math.max(0, downCount - (frame.roll1 || 0));
-        } else if (currentFrame === totalFrames - 1) {
-          if (currentRoll === 2 && frame.roll1 !== 10) {
-            pinsThisRoll = Math.max(0, downCount - (frame.roll1 || 0));
-          } else if (currentRoll === 3 && frame.roll2 !== 10 && frame.roll1 === 10) {
-            pinsThisRoll = Math.max(0, downCount - (frame.roll2 || 0));
-          } else if (currentRoll === 3 && frame.roll1 !== 10) {
-            pinsThisRoll = downCount;
-          }
-        }
-        
-        advanceRoll(pinsThisRoll);
-        
-        const nextState = useStore.getState();
-        if (nextState.gameState !== 'results' && !nextState.teacherAdvancePending) {
-          ballRef.current?.reset();
-          
-          const isNextFrame = nextState.currentFrame > currentFrame;
-          const isNextPlayer = nextState.currentPlayerIndex !== currentPlayerIndex;
-          const isLastFrameReset = currentFrame === totalFrames - 1 && (
-            (currentRoll === 1 && pinsThisRoll === 10) || 
-            (currentRoll === 2 && (frame.roll1 || 0) + pinsThisRoll === 10) ||
-            (currentRoll === 2 && frame.roll1 === 10 && pinsThisRoll === 10)
-          );
-          
-          if (isNextFrame || isNextPlayer || isLastFrameReset) {
-            pinRefs.current.forEach(p => p?.reset());
-          } else {
-            // Hide fallen pins between rolls
-            pinRefs.current.forEach(p => {
-              if (p) {
-                const rot = p.getRotation();
-                const pos = p.getPosition();
-                const euler = new Euler(rot[0], rot[1], rot[2]);
-                const currentUp = new Vector3(0, 1, 0).applyEuler(euler);
-                const angle = currentUp.angleTo(new Vector3(0, 1, 0));
-                if (angle > 1.0 || pos[1] < 0) {
-                  p.hide();
-                }
-              }
-            });
-          }
-          
-          setTimeout(() => {
-            useStore.setState({ spinAmount: 0 });
-            setPlayState(nextState.oneTouchMode ? 'aiming' : 'spin');
-            fallenPinsThisRoll.current.clear();
-          }, 1500);
-        } else if (nextState.teacherAdvancePending) {
-           ballRef.current?.reset();
-           pinRefs.current.forEach(p => p?.reset());
-        }
-        
-        rollTimer.current = 0;
+    if (playState !== 'scoring') return;
+
+    rollTimer.current += delta;
+
+    // Score as soon as the rack has actually stopped moving, instead of always
+    // burning a fixed three seconds. Cuts roughly 1.5s of dead time off every
+    // single roll, which adds up fast with a full class waiting their turn.
+    if (rollTimer.current < MIN_SETTLE_S) return;
+    if (rollTimer.current < MAX_SETTLE_S) {
+      const stillMoving = pinRefs.current.some((p) => p && p.getSpeed() > PIN_STILL_SPEED);
+      if (stillMoving) return;
+    }
+
+    let downCount = 0;
+    pinRefs.current.forEach((pin) => {
+      if (pin?.isFallen()) downCount++;
+    });
+
+    setPinsDown(downCount);
+
+    const { currentFrame, currentRoll, playerFrames, players, currentPlayerIndex, totalFrames } = useStore.getState();
+    const playerId = players[currentPlayerIndex].id;
+    const frame = playerFrames[playerId][currentFrame];
+    const lastFrameIndex = totalFrames - 1;
+
+    let pinsThisRoll = downCount;
+    if (currentRoll === 2 && currentFrame < lastFrameIndex) {
+      pinsThisRoll = Math.max(0, downCount - (frame.roll1 || 0));
+    } else if (currentFrame === lastFrameIndex) {
+      if (currentRoll === 2 && frame.roll1 !== 10) {
+        pinsThisRoll = Math.max(0, downCount - (frame.roll1 || 0));
+      } else if (currentRoll === 3 && frame.roll2 !== 10 && frame.roll1 === 10) {
+        pinsThisRoll = Math.max(0, downCount - (frame.roll2 || 0));
+      } else if (currentRoll === 3 && frame.roll1 !== 10) {
+        pinsThisRoll = downCount;
       }
     }
+
+    const gutterThisRoll = wasGutter.current;
+    advanceRoll(pinsThisRoll, gutterThisRoll);
+
+    const nextState = useStore.getState();
+    if (nextState.gameState !== 'results' && !nextState.teacherAdvancePending) {
+      ballRef.current?.reset();
+
+      const isNextFrame = nextState.currentFrame > currentFrame;
+      const isNextPlayer = nextState.currentPlayerIndex !== currentPlayerIndex;
+      const isLastFrameReset = currentFrame === lastFrameIndex && (
+        (currentRoll === 1 && pinsThisRoll === 10) ||
+        (currentRoll === 2 && (frame.roll1 || 0) + pinsThisRoll === 10) ||
+        (currentRoll === 2 && frame.roll1 === 10 && pinsThisRoll === 10)
+      );
+
+      if (isNextFrame || isNextPlayer || isLastFrameReset) {
+        pinRefs.current.forEach(p => p?.reset());
+      } else {
+        // Clear the pins that are already down before the second roll.
+        pinRefs.current.forEach(p => {
+          if (p?.isFallen()) p.hide();
+        });
+      }
+
+      setTimeout(() => {
+        const s = useStore.getState();
+        if (s.gameState !== 'playing' || s.teacherAdvancePending) return;
+        const settings = getActiveSettings();
+        useStore.setState({
+          spinAmount: 0,
+          playState: settings.oneTouch ? 'aiming' : 'spin',
+        });
+        fallenPinsThisRoll.current.clear();
+      }, NEXT_TURN_DELAY_MS);
+    } else if (nextState.teacherAdvancePending) {
+      ballRef.current?.reset();
+      pinRefs.current.forEach(p => p?.reset());
+      fallenPinsThisRoll.current.clear();
+    }
+
+    rollTimer.current = 0;
+    wasGutter.current = false;
+    gutterTimer.current = 0;
   });
 
   // Handle Roll Trigger
   useEffect(() => {
     if (playState === 'rolling' && ballRef.current) {
+      const { aimAngle, powerLevel } = useStore.getState();
       ballRef.current.roll(aimAngle, powerLevel);
       rollTimer.current = 0;
+      wasGutter.current = false;
+      gutterTimer.current = 0;
     }
-  }, [playState, aimAngle, powerLevel]);
-
-  // Reset pins when game ends
-  useEffect(() => {
-    if (useStore.getState().gameState === 'results') {
-      ballRef.current?.reset();
-      pinRefs.current.forEach(p => p?.reset());
-    }
-  }, [useStore.getState().gameState]);
+  }, [playState]);
 
   return <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 2, 11]} fov={50} />;
 }
@@ -287,16 +330,17 @@ export function Scene() {
   const ballRef = useRef<BallRef>(null);
   const pinRefs = useRef<(PinRef | null)[]>([]);
   const isPaused = useStore((state) => state.isPaused);
+  const reduceMotion = useStore((state) => state.reduceMotion);
 
   return (
     <>
       <color attach="background" args={['#0a0a0f']} />
       <fog attach="fog" args={['#0a0a0f', 10, 30]} />
-      
-      <ambientLight intensity={0.5} />
+
+      <ambientLight intensity={reduceMotion ? 0.7 : 0.5} />
       <directionalLight position={[0, 10, 5]} intensity={1} castShadow />
       <pointLight position={[0, 2, -15]} intensity={2} color="#00f2ff" />
-      
+
       <Grid
         position={[0, -0.01, 0]}
         args={[40, 40]}
@@ -309,7 +353,7 @@ export function Scene() {
         fadeDistance={30}
         fadeStrength={1}
       />
-      
+
       <FloatingTriangles />
 
       <AimGuide />
