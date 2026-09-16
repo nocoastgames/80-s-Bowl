@@ -229,6 +229,67 @@ class RetroAudioEngine {
   }
 
   /**
+   * The sweeper crossing the deck: a band of filtered noise that opens up and
+   * closes again, under a synth tone that rises and falls with it. Meant to
+   * read as machinery made of light rather than a mechanical rake.
+   */
+  playSweep(durationMs = 650) {
+    if (!this.ctx) this.init();
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const dur = durationMs / 1000;
+    const now = ctx.currentTime;
+
+    // Noise band, swept upward then back down.
+    const bufferSize = Math.floor(ctx.sampleRate * dur);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.Q.value = 6;
+    bandpass.frequency.setValueAtTime(400, now);
+    bandpass.frequency.exponentialRampToValueAtTime(2600, now + dur * 0.55);
+    bandpass.frequency.exponentialRampToValueAtTime(500, now + dur);
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.28 * this.sfxVolume + 0.0001, now + dur * 0.3);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+    noise.connect(bandpass);
+    bandpass.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start(now);
+
+    // Synth tone riding along with it.
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(680, now + dur * 0.55);
+    osc.frequency.exponentialRampToValueAtTime(220, now + dur);
+
+    const oscFilter = ctx.createBiquadFilter();
+    oscFilter.type = 'lowpass';
+    oscFilter.frequency.value = 1800;
+
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.0001, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.1 * this.sfxVolume + 0.0001, now + dur * 0.25);
+    oscGain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+    osc.connect(oscFilter);
+    oscFilter.connect(oscGain);
+    oscGain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + dur);
+  }
+
+  /**
    * Rubbery thump for a ball rebounding off a bumper. Pitched up rather than
    * down, so it reads as "still in play" next to the gutter's falling blip.
    */

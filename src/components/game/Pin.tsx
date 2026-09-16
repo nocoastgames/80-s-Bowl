@@ -5,6 +5,7 @@ import { MeshStandardMaterial, Vector3, Euler } from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useStore } from '../../store';
 import { MAT } from '../../lib/physics';
+import { DEREZ_MS, MATERIALIZE_MS } from '../../lib/rackAnim';
 
 interface PinProps {
   position: [number, number, number];
@@ -20,6 +21,20 @@ export interface PinRef {
   isFallen: () => boolean;
   /** Has started to go over — used to sound the hit the moment it happens. */
   isTipping: () => boolean;
+  /** Collapse into a bar of light and wink out. Visual only. */
+  derez: (delayMs?: number) => void;
+  /** Beam back in from nothing. Visual only; call after reset(). */
+  materialize: (delayMs?: number) => void;
+}
+
+/** Base scale of the pin's visual group. */
+const PIN_SCALE = 2.25;
+
+/** Overshoot easing, so a pin snaps in rather than easing politely. */
+function easeOutBack(p: number) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
 }
 
 /** Tilt past this angle (radians) and the pin counts as knocked down. */
@@ -86,6 +101,15 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
   const vel = useRef<[number, number, number]>([0, 0, 0]);
   const glowMaterialRef = useRef<MeshStandardMaterial>(null);
   const blobsRef = useRef<THREE.Group>(null);
+  const visualRef = useRef<THREE.Group>(null);
+  const beamRef = useRef<THREE.Mesh>(null);
+  const beamMatRef = useRef<any>(null);
+
+  /** Rack clear/reset animation state. `at` is when this pin's turn starts. */
+  const anim = useRef<{ mode: 'none' | 'derez' | 'materialize'; at: number }>({
+    mode: 'none',
+    at: 0,
+  });
 
   // Random phase offsets for blobs based on pin
   const blobOffsets = useMemo(() => {
@@ -110,6 +134,58 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
   }, [api]);
 
   useFrame((state) => {
+    // --- Rack clear / reset animation -------------------------------------
+    // Runs before the glow logic so its flash can be layered on top.
+    let animBoost = 0;
+    const a = anim.current;
+    const vis = visualRef.current;
+
+    if (a.mode !== 'none' && vis) {
+      const elapsed = performance.now() - a.at;
+      const dur = a.mode === 'derez' ? DEREZ_MS : MATERIALIZE_MS;
+      const p = Math.min(1, Math.max(0, elapsed / dur));
+
+      if (elapsed < 0) {
+        // Waiting out this pin's stagger. A pin due to materialise stays
+        // hidden until its moment; one due to derez keeps standing.
+        if (a.mode === 'materialize') vis.visible = false;
+      } else if (a.mode === 'derez') {
+        // Squash flat and spread outward, like the pin is being flattened
+        // into a disc of light.
+        vis.visible = true;
+        vis.scale.set(PIN_SCALE * (1 + p * 0.9), PIN_SCALE * (1 - p), PIN_SCALE * (1 + p * 0.9));
+        animBoost = p * 16;
+        if (beamMatRef.current && beamRef.current) {
+          beamRef.current.visible = true;
+          beamMatRef.current.opacity = Math.sin(Math.PI * p) * 0.55;
+        }
+        if (p >= 1) {
+          vis.visible = false;
+          if (beamRef.current) beamRef.current.visible = false;
+          a.mode = 'none';
+        }
+      } else {
+        // Reverse: a flat disc of light snaps up into a pin.
+        vis.visible = true;
+        const s = easeOutBack(p);
+        vis.scale.set(
+          PIN_SCALE * (1 + (1 - p) * 0.9),
+          PIN_SCALE * Math.max(0.001, s),
+          PIN_SCALE * (1 + (1 - p) * 0.9)
+        );
+        animBoost = (1 - p) * 16;
+        if (beamMatRef.current && beamRef.current) {
+          beamRef.current.visible = true;
+          beamMatRef.current.opacity = (1 - p) * 0.6;
+        }
+        if (p >= 1) {
+          vis.scale.setScalar(PIN_SCALE);
+          if (beamRef.current) beamRef.current.visible = false;
+          a.mode = 'none';
+        }
+      }
+    }
+
     if (!glowMaterialRef.current) return;
 
     const isFallen = tiltAngle(rot.current) > FALLEN_ANGLE || pos.current[1] < 0;
@@ -124,7 +200,7 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
 
     const t = state.clock.elapsedTime;
     const pulsing = Math.sin(t * 3) * 0.8; // pulsing glow effect
-    glowMaterialRef.current.emissiveIntensity = isFallen ? 0 : 3.0 + pulsing;
+    glowMaterialRef.current.emissiveIntensity = (isFallen ? 0 : 3.0 + pulsing) + animBoost;
     glowMaterialRef.current.opacity = isFallen ? 0.2 : 0.6;
 
     if (!isFallen && blobsRef.current) {
@@ -152,6 +228,37 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
       // Briefly wake to register position, then sleep to prevent wobble
       api.wakeUp();
       setTimeout(() => api.sleep(), 50);
+
+      // Clear any animation left mid-flight (e.g. the pause menu's Reset Pins
+      // landing in the middle of a sweep) and restore the pin's normal look.
+      anim.current.mode = 'none';
+      if (visualRef.current) {
+        visualRef.current.visible = true;
+        visualRef.current.scale.setScalar(PIN_SCALE);
+      }
+      if (beamRef.current) beamRef.current.visible = false;
+    },
+    derez: (delayMs = 0) => {
+      // Already off the deck, or motion is reduced: skip straight to the end
+      // state rather than animating something nobody asked to see.
+      if (pos.current[1] < -5 || useStore.getState().reduceMotion) {
+        anim.current.mode = 'none';
+        if (visualRef.current) visualRef.current.visible = false;
+        if (beamRef.current) beamRef.current.visible = false;
+        return;
+      }
+      anim.current = { mode: 'derez', at: performance.now() + delayMs };
+    },
+    materialize: (delayMs = 0) => {
+      if (useStore.getState().reduceMotion) {
+        anim.current.mode = 'none';
+        if (visualRef.current) {
+          visualRef.current.visible = true;
+          visualRef.current.scale.setScalar(PIN_SCALE);
+        }
+        return;
+      }
+      anim.current = { mode: 'materialize', at: performance.now() + delayMs };
     },
     hide: () => {
       api.position.set(0, -10, 0);
@@ -168,8 +275,25 @@ export const Pin = forwardRef<PinRef, PinProps>(({ position, id }, ref) => {
 
   return (
     <mesh ref={pinRef as any} castShadow receiveShadow>
+      {/* Column of light the pin travels in and out on. Sits outside the
+          scaled visual group so it keeps its full height while the pin
+          itself is collapsing. */}
+      <mesh ref={beamRef} position={[0, 0.6, 0]} visible={false}>
+        <cylinderGeometry args={[0.17, 0.17, 3.2, 12, 1, true]} />
+        <meshBasicMaterial
+          ref={beamMatRef}
+          color={colors.blob}
+          transparent
+          opacity={0}
+          blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+
       {/* Lava Lamp Visuals - Scaled up */}
-      <group position={[0, -0.45, 0]} scale={[2.25, 2.25, 2.25]}>
+      <group ref={visualRef} position={[0, -0.45, 0]} scale={[PIN_SCALE, PIN_SCALE, PIN_SCALE]}>
         {/* Base */}
         <mesh position={[0, 0.05, 0]}>
           <cylinderGeometry args={[0.04, 0.06, 0.1, 16]} />

@@ -10,6 +10,14 @@ import { Pin, PinRef } from './Pin';
 import { audioEngine } from '../../lib/audio';
 import { sweep } from '../../lib/sweep';
 import { MAT, CONTACT_PAIRS, type ContactPair } from '../../lib/physics';
+import { RackSweeper } from './RackSweeper';
+import {
+  triggerSweep,
+  DEREZ_STAGGER_MS,
+  MATERIALIZE_STAGGER_MS,
+  RACK_CLEAR_MS,
+  RACK_RESET_MS,
+} from '../../lib/rackAnim';
 
 const PIN_POSITIONS: [number, number, number][] = [
   [0, 0.45, -LANE_LENGTH / 2 + 1.2], // 1
@@ -345,13 +353,48 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
         (currentRoll === 2 && frame.roll1 === 10 && pinsThisRoll === 10)
       );
 
-      if (isNextFrame || isNextPlayer || isLastFrameReset) {
-        pinRefs.current.forEach(p => p?.reset());
+      const reduceMotion = useStore.getState().reduceMotion;
+      const fullRack = isNextFrame || isNextPlayer || isLastFrameReset;
+      let handoverDelay = NEXT_TURN_DELAY_MS;
+
+      if (reduceMotion) {
+        // No sweep, no derez — swap the deck instantly.
+        if (fullRack) {
+          pinRefs.current.forEach(p => p?.reset());
+        } else {
+          pinRefs.current.forEach(p => { if (p?.isFallen()) p.hide(); });
+        }
+      } else if (fullRack) {
+        // Clear the whole deck as a wave, run the sweeper across it, then beam
+        // a fresh rack back in behind it.
+        audioEngine.playSweep();
+        triggerSweep();
+        pinRefs.current.forEach((p, i) => p?.derez(i * DEREZ_STAGGER_MS));
+        setTimeout(() => {
+          pinRefs.current.forEach((p, i) => {
+            p?.reset();
+            p?.materialize(i * MATERIALIZE_STAGGER_MS);
+          });
+        }, RACK_CLEAR_MS);
+        handoverDelay = RACK_RESET_MS;
       } else {
-        // Clear the pins that are already down before the second roll.
-        pinRefs.current.forEach(p => {
-          if (p?.isFallen()) p.hide();
+        // Between rolls only the downed pins are swept away; the standing ones
+        // have to stay exactly where they are for the spare attempt.
+        let order = 0;
+        pinRefs.current.forEach((p) => {
+          if (p?.isFallen()) {
+            p.derez(order * DEREZ_STAGGER_MS);
+            order++;
+          }
         });
+        if (order > 0) {
+          audioEngine.playSweep();
+          triggerSweep();
+          setTimeout(() => {
+            pinRefs.current.forEach(p => { if (p?.isFallen()) p.hide(); });
+          }, RACK_CLEAR_MS);
+          handoverDelay = Math.max(NEXT_TURN_DELAY_MS, RACK_CLEAR_MS + 200);
+        }
       }
 
       setTimeout(() => {
@@ -363,10 +406,25 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
           playState: settings.oneTouch ? 'aiming' : 'spin',
         });
         fallenPinsThisRoll.current.clear();
-      }, NEXT_TURN_DELAY_MS);
+      }, handoverDelay);
     } else if (nextState.teacherAdvancePending) {
+      // Class mode: the turn is over and the teacher decides when to move on.
+      // Reset the deck behind the modal so the next bowler walks up to a fresh
+      // rack, running the same sweep unless motion is reduced.
       ballRef.current?.reset();
-      pinRefs.current.forEach(p => p?.reset());
+      if (useStore.getState().reduceMotion) {
+        pinRefs.current.forEach(p => p?.reset());
+      } else {
+        audioEngine.playSweep();
+        triggerSweep();
+        pinRefs.current.forEach((p, i) => p?.derez(i * DEREZ_STAGGER_MS));
+        setTimeout(() => {
+          pinRefs.current.forEach((p, i) => {
+            p?.reset();
+            p?.materialize(i * MATERIALIZE_STAGGER_MS);
+          });
+        }, RACK_CLEAR_MS);
+      }
       fallenPinsThisRoll.current.clear();
     }
 
@@ -420,6 +478,7 @@ export function Scene() {
       <FloatingTriangles />
 
       <AimGuide />
+      <RackSweeper />
 
       {/* More solver iterations than the default 5: a fast, heavy ball against
           a thin static wall is exactly the case where a loose solver lets the
