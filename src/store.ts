@@ -174,10 +174,21 @@ interface BowlingStore {
 }
 
 const persisted = loadSettings();
-const pick = <K extends keyof PersistedSettings>(
+
+/**
+ * Read a persisted setting, falling back to a default when it is absent.
+ *
+ * The cast is needed because `persisted` is a `Partial`, and TypeScript will
+ * not reduce `Partial<T>[K]` to `T[K]` for a generic `K` even after an
+ * undefined check — it can't resolve the indexed access until `K` is known.
+ */
+function pick<K extends keyof PersistedSettings>(
   key: K,
   fallback: PersistedSettings[K]
-): PersistedSettings[K] => (persisted[key] === undefined ? fallback : persisted[key]!);
+): PersistedSettings[K] {
+  const value = persisted[key];
+  return value === undefined ? fallback : (value as PersistedSettings[K]);
+}
 
 /**
  * Resolve the settings that apply to a given player, falling back to the
