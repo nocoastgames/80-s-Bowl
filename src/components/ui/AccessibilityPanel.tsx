@@ -128,6 +128,8 @@ export function AccessibilityPanel({ showTester = true }: { showTester?: boolean
   const setSwitchAcceptsAnyKey = useStore((s) => s.setSwitchAcceptsAnyKey);
   const reduceMotion = useStore((s) => s.reduceMotion);
   const setReduceMotion = useStore((s) => s.setReduceMotion);
+  const teacherAdvanceRequired = useStore((s) => s.teacherAdvanceRequired);
+  const setTeacherAdvanceRequired = useStore((s) => s.setTeacherAdvanceRequired);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -203,6 +205,17 @@ export function AccessibilityPanel({ showTester = true }: { showTester?: boolean
           { label: 'Any key', value: true },
         ]}
         onChange={setSwitchAcceptsAnyKey}
+      />
+
+      <OptionGroup
+        label="Turn Advance"
+        hint="Class mode. Automatic moves to the next bowler on its own, after the turn summary."
+        value={teacherAdvanceRequired}
+        options={[
+          { label: 'Teacher presses Next', value: true },
+          { label: 'Automatic', value: false },
+        ]}
+        onChange={setTeacherAdvanceRequired}
       />
 
       <OptionGroup

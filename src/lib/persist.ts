@@ -19,6 +19,7 @@ export interface PersistedSettings {
   switchHoldMs: number;
   switchCooldownMs: number;
   switchAcceptsAnyKey: boolean;
+  teacherAdvanceRequired: boolean;
   reduceMotion: boolean;
   bgmVolume: number;
   sfxVolume: number;

@@ -120,6 +120,8 @@ export function GameplayOverlay() {
   const players = useStore((s) => s.players);
   const currentPlayerIndex = useStore((s) => s.currentPlayerIndex);
   const teacherAdvancePending = useStore((s) => s.teacherAdvancePending);
+  const advanceReady = useStore((s) => s.advanceReady);
+  const teacherAdvanceRequired = useStore((s) => s.teacherAdvanceRequired);
   const nextPlayer = useStore((s) => s.nextPlayer);
   const undoLastRoll = useStore((s) => s.undoLastRoll);
   const canUndo = useStore((s) => s.history.length > 0);
@@ -298,6 +300,15 @@ export function GameplayOverlay() {
     return () => clearTimeout(timer);
   }, [lastOutcome]);
 
+  // Safety net. The advance prompt is armed by the scene once the rack reset
+  // finishes; if that ever fails to land, a teacher would be left mid-game with
+  // no way to move on. Arm it anyway after a few seconds.
+  useEffect(() => {
+    if (!teacherAdvancePending || advanceReady) return;
+    const timer = setTimeout(() => useStore.getState().setAdvanceReady(true), 4000);
+    return () => clearTimeout(timer);
+  }, [teacherAdvancePending, advanceReady]);
+
   const stationName = currentStationIndex === -1 ? 'OFF' : RADIO_STATIONS[currentStationIndex]?.name || 'OFF';
   const isAudioActive = !isPaused && currentStationIndex !== -1 && audioEngine.isPlayingBgm;
   const songText = useCurrentSong(currentStationIndex);
@@ -320,7 +331,11 @@ export function GameplayOverlay() {
 
   // --- Prompt text ------------------------------------------------------------
   const prompt = teacherAdvancePending
-    ? 'Waiting for Teacher'
+    ? advanceReady
+      ? teacherAdvanceRequired
+        ? 'Waiting for Teacher'
+        : 'Next player coming up'
+      : 'Nice bowling!'
     : playState === 'idle' ? 'Get ready'
     : playState === 'spin' ? 'Press your switch to set the spin'
     : playState === 'aiming' ? (oneTouch ? 'Press your switch to bowl' : 'Press your switch to set your aim')
@@ -484,37 +499,41 @@ export function GameplayOverlay() {
           </div>
         )}
 
-        {/* Teacher Advance Modal */}
-        {teacherAdvancePending && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-50">
-            <div className="bg-panel p-8 rounded-xl border border-white/20 text-center max-w-md">
-              <h2 className="text-3xl font-bold text-accent mb-2">Turn Complete</h2>
-              <p className="text-2xl mb-1">
-                {currentPlayer?.name} knocked down {pinsDown} {pinsDown === 1 ? 'pin' : 'pins'}
-              </p>
-              <p className="text-xl text-[#aaa] mb-4">Total score: {currentScore}</p>
+        {/* End-of-turn panel.
+            Anchored low and with no full-screen backdrop: it used to be a
+            centred modal over a black overlay, which covered the celebration
+            and the whole rack reset the class was watching. It also only
+            appears once those have finished playing. */}
+        {teacherAdvancePending && advanceReady && (
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-6 z-40 w-full max-w-3xl px-4">
+            <div className="bg-panel/95 backdrop-blur-sm border-2 border-accent rounded-xl px-6 py-4 shadow-[0_0_40px_rgba(0,0,0,0.6)] flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-2xl font-bold leading-tight">
+                  {currentPlayer?.name}: {pinsDown} {pinsDown === 1 ? 'pin' : 'pins'}
+                  <span className="text-[#aaa] font-normal text-xl"> &middot; total {currentScore}</span>
+                </p>
+                {!isLastTurnOfGame && upNext && (
+                  <p className="text-lg text-[#00ffff] font-bold">Next up: {upNext.name}</p>
+                )}
+              </div>
 
-              {!isLastTurnOfGame && upNext && (
-                <p className="text-lg text-[#00ffff] mb-8 font-bold">Next up: {upNext.name}</p>
-              )}
-
-              <button
-                onClick={nextPlayer}
-                className="bg-warn text-black px-8 py-4 rounded font-black text-2xl uppercase tracking-wider hover:bg-white transition-colors shadow-[0_0_20px_rgba(255,255,0,0.4)] pointer-events-auto"
-              >
-                {isLastTurnOfGame ? 'Finish Game' : 'Next Player'}
-              </button>
-
-              {canUndo && (
+              <div className="flex items-center gap-3">
+                {canUndo && (
+                  <button
+                    onClick={undoLastRoll}
+                    className="px-5 py-3 bg-white/10 hover:bg-white/20 border border-white/30 rounded font-bold uppercase tracking-wider transition-colors pointer-events-auto"
+                  >
+                    Undo Roll
+                  </button>
+                )}
                 <button
-                  onClick={undoLastRoll}
-                  className="block w-full mt-4 px-6 py-2 bg-white/10 hover:bg-white/20 border border-white/30 rounded font-bold uppercase tracking-wider transition-colors pointer-events-auto"
+                  onClick={nextPlayer}
+                  autoFocus
+                  className="bg-warn text-black px-8 py-4 rounded font-black text-2xl uppercase tracking-wider hover:bg-white transition-colors shadow-[0_0_20px_rgba(255,255,0,0.4)] pointer-events-auto"
                 >
-                  Undo that roll
+                  {isLastTurnOfGame ? 'Finish Game' : 'Next Player'}
                 </button>
-              )}
-
-              <p className="text-[#aaa] mt-4 text-sm">Teacher clicks to advance</p>
+              </div>
             </div>
           </div>
         )}

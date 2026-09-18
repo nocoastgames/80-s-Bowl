@@ -114,6 +114,19 @@ interface BowlingStore {
 
   teacherAdvancePending: boolean;
   setTeacherAdvancePending: (pending: boolean) => void;
+  /**
+   * Whether a turn ends by the teacher pressing Next, or moves on by itself.
+   * Off, the game still shows the turn summary before advancing.
+   */
+  teacherAdvanceRequired: boolean;
+  setTeacherAdvanceRequired: (required: boolean) => void;
+  /**
+   * True once the end-of-turn celebration and rack reset have finished playing.
+   * The advance prompt waits for this so it can't cover the visuals or let a
+   * turn be skipped through them.
+   */
+  advanceReady: boolean;
+  setAdvanceReady: (ready: boolean) => void;
   nextPlayer: () => void;
 
   sweepSpeed: number;
@@ -237,6 +250,10 @@ export const useStore = create<BowlingStore>((set, get) => ({
 
   teacherAdvancePending: false,
   setTeacherAdvancePending: (pending) => set({ teacherAdvancePending: pending }),
+  teacherAdvanceRequired: pick('teacherAdvanceRequired', true),
+  setTeacherAdvanceRequired: (required) => set({ teacherAdvanceRequired: required }),
+  advanceReady: false,
+  setAdvanceReady: (ready) => set({ advanceReady: ready }),
 
   sweepSpeed: pick('sweepSpeed', 0.75),
   setSweepSpeed: (speed) => set({ sweepSpeed: speed }),
@@ -293,6 +310,7 @@ export const useStore = create<BowlingStore>((set, get) => ({
       gameState: prev.gameState,
       history: state.history.slice(0, -1),
       teacherAdvancePending: false,
+      advanceReady: false,
       lastOutcome: null,
       pinsDown: 0,
       playState: 'idle',
@@ -334,6 +352,7 @@ export const useStore = create<BowlingStore>((set, get) => ({
       playState: settings.oneTouch ? 'aiming' : 'spin',
       spinAmount: 0,
       teacherAdvancePending: false,
+      advanceReady: false,
       pinsDown: 0,
       history: [],
       lastOutcome: null,
@@ -350,6 +369,7 @@ export const useStore = create<BowlingStore>((set, get) => ({
         currentPlayerIndex: nextIdx,
         currentRoll: 1,
         teacherAdvancePending: false,
+        advanceReady: false,
         playState: settings.oneTouch ? 'aiming' : 'spin',
         spinAmount: 0,
         pinsDown: 0,
@@ -364,13 +384,14 @@ export const useStore = create<BowlingStore>((set, get) => ({
           currentFrame: nextFrame,
           currentRoll: 1,
           teacherAdvancePending: false,
+          advanceReady: false,
           playState: settings.oneTouch ? 'aiming' : 'spin',
           spinAmount: 0,
           pinsDown: 0,
           lastOutcome: null,
         });
       } else {
-        set({ gameState: 'results', teacherAdvancePending: false, playState: 'idle' });
+        set({ gameState: 'results', teacherAdvancePending: false, advanceReady: false, playState: 'idle' });
       }
     }
   },
@@ -442,6 +463,7 @@ export const useStore = create<BowlingStore>((set, get) => ({
         set({
           playerFrames: { ...state.playerFrames, [playerId]: frames },
           teacherAdvancePending: true,
+          advanceReady: false,
           playState: 'idle',
           history,
           lastOutcome,
@@ -482,6 +504,7 @@ export const useStore = create<BowlingStore>((set, get) => ({
     currentFrame: 0,
     currentRoll: 1,
     teacherAdvancePending: false,
+    advanceReady: false,
     playState: 'idle',
     spinAmount: 0,
     pinsDown: 0,
@@ -529,6 +552,7 @@ useStore.subscribe((state) => {
       switchHoldMs: state.switchHoldMs,
       switchCooldownMs: state.switchCooldownMs,
       switchAcceptsAnyKey: state.switchAcceptsAnyKey,
+      teacherAdvanceRequired: state.teacherAdvanceRequired,
       reduceMotion: state.reduceMotion,
       bgmVolume: state.bgmVolume,
       sfxVolume: state.sfxVolume,

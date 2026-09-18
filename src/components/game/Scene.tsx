@@ -72,6 +72,16 @@ const CAMERA_RETURN_SETTLE_MS = 800;
 const SWEEP_HANDOVER_MS = RACK_CLEAR_MS + DECK_HOLD_TAIL_MS + CAMERA_RETURN_SETTLE_MS;
 
 /**
+ * How long the end of a turn plays out before the game offers to move on.
+ *
+ * Long enough for the celebration banner and the full rack reset, so the class
+ * gets to watch the pins go down and come back. Shorter with reduced motion,
+ * where there is nothing to watch.
+ */
+const TURN_SUMMARY_MS = 2100;
+const REDUCED_TURN_SUMMARY_MS = 900;
+
+/**
  * Critically damped spring, the standard smooth-camera move.
  *
  * An exponential lerp is at its fastest on the very first frame, so a camera
@@ -540,13 +550,16 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
         fallenPinsThisRoll.current.clear();
       }, handoverDelay);
     } else if (nextState.teacherAdvancePending) {
-      // Class mode: the turn is over and the teacher decides when to move on.
-      // Reset the deck behind the modal so the next bowler walks up to a fresh
-      // rack, running the same sweep unless motion is reduced.
+      // Class mode: the turn is over. Play the celebration and rack reset
+      // first, and only then offer the advance — otherwise the prompt lands on
+      // top of the visuals the class is watching, and pressing it cuts them off.
       ballRef.current?.reset();
-      if (useStore.getState().reduceMotion) {
+      const reduce = useStore.getState().reduceMotion;
+
+      if (reduce) {
         pinRefs.current.forEach(p => p?.reset());
       } else {
+        cameraHoldUntil.current = performance.now() + RACK_CLEAR_MS + DECK_HOLD_TAIL_MS;
         audioEngine.playSweep();
         triggerSweep();
         pinRefs.current.forEach((p, i) => p?.derez(i * DEREZ_STAGGER_MS));
@@ -557,6 +570,18 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
           });
         }, RACK_CLEAR_MS);
       }
+
+      setTimeout(() => {
+        const s = useStore.getState();
+        // The teacher may have already undone the roll or ended the game.
+        if (!s.teacherAdvancePending || s.gameState !== 'playing') return;
+        if (s.teacherAdvanceRequired) {
+          s.setAdvanceReady(true);
+        } else {
+          s.nextPlayer();
+        }
+      }, reduce ? REDUCED_TURN_SUMMARY_MS : TURN_SUMMARY_MS);
+
       fallenPinsThisRoll.current.clear();
     }
 
