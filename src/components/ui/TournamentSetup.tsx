@@ -3,45 +3,9 @@ import { useStore, type Player } from '../../store';
 import { RADIO_STATIONS, audioEngine } from '../../lib/audio';
 import { AccessibilityPanel } from './AccessibilityPanel';
 import { loadRosters, saveRoster, deleteRoster, type SavedRoster } from '../../lib/persist';
+import { PlayerOverrides, playerHasOverrides } from './PlayerOverrides';
 
 const MAX_PLAYERS = 32;
-
-/** `undefined` means "use the class default", which is the common case. */
-type Override<T> = T | undefined;
-
-function OverrideSelect<T extends string | number | boolean>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: Override<T>;
-  options: { label: string; value: T }[];
-  onChange: (value: Override<T>) => void;
-}) {
-  const selected = value === undefined ? '' : String(value);
-  return (
-    <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[1px] text-accent">
-      {label}
-      <select
-        value={selected}
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (raw === '') return onChange(undefined);
-          const match = options.find((o) => String(o.value) === raw);
-          onChange(match ? match.value : undefined);
-        }}
-        className="bg-bg-dark border border-white/20 rounded px-2 py-1.5 text-sm text-white normal-case tracking-normal focus:border-accent focus:outline-none"
-      >
-        <option value="">Class default</option>
-        {options.map((o) => (
-          <option key={String(o.value)} value={String(o.value)}>{o.label}</option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 function PlayerRow({
   player,
@@ -54,31 +18,19 @@ function PlayerRow({
   onRemove: () => void;
   onUpdate: (patch: Partial<Player>) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const hasOverrides =
-    player.oneTouchMode !== undefined ||
-    player.bumpersEnabled !== undefined ||
-    player.sweepSpeed !== undefined ||
-    player.autoAssistMs !== undefined;
-
+  // Always visible rather than behind a "Settings" expander. Classes here are
+  // small, and a per-student setting nobody can see is a setting nobody uses.
   return (
     <li className="bg-white/5 rounded border border-white/10 overflow-hidden">
       <div className="flex justify-between items-center p-3 gap-2">
         <span className="text-xl font-medium flex-1 min-w-0 truncate">
           {index + 1}. {player.name}
-          {hasOverrides && (
+          {playerHasOverrides(player) && (
             <span className="ml-2 text-[11px] uppercase tracking-[1px] text-[#00ff00] align-middle">
               custom
             </span>
           )}
         </span>
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className="text-sm px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded font-bold whitespace-nowrap"
-        >
-          {expanded ? 'Hide' : 'Settings'}
-        </button>
         <button
           onClick={onRemove}
           className="text-[#ff3b3b] hover:text-[#ff0000] font-bold px-2"
@@ -88,73 +40,13 @@ function PlayerRow({
         </button>
       </div>
 
-      {expanded && (
-        <div className="border-t border-white/10 p-3 bg-black/30">
-          <p className="text-[#9aa] text-sm mb-3">
-            Anything left on &ldquo;Class default&rdquo; follows the class-wide setting.
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <OverrideSelect
-              label="Control"
-              value={player.oneTouchMode}
-              options={[
-                { label: 'Standard', value: false },
-                { label: '1-Touch', value: true },
-              ]}
-              onChange={(v) => onUpdate({ oneTouchMode: v })}
-            />
-            <OverrideSelect
-              label="Speed"
-              value={player.sweepSpeed}
-              options={[
-                { label: 'Slow', value: 0.35 },
-                { label: 'Relaxed', value: 0.5 },
-                { label: 'Normal', value: 0.75 },
-                { label: 'Fast', value: 1.0 },
-              ]}
-              onChange={(v) => onUpdate({ sweepSpeed: v })}
-            />
-            <OverrideSelect
-              label="Bumpers"
-              value={player.bumpersEnabled}
-              options={[
-                { label: 'Off', value: false },
-                { label: 'On', value: true },
-              ]}
-              onChange={(v) => onUpdate({ bumpersEnabled: v })}
-            />
-            <OverrideSelect
-              label="Auto-Assist"
-              value={player.autoAssistMs}
-              options={[
-                { label: 'Off', value: 0 },
-                { label: '5s', value: 5000 },
-                { label: '10s', value: 10000 },
-                { label: '20s', value: 20000 },
-              ]}
-              onChange={(v) => onUpdate({ autoAssistMs: v })}
-            />
-          </div>
-          {hasOverrides && (
-            <button
-              onClick={() =>
-                onUpdate({
-                  oneTouchMode: undefined,
-                  bumpersEnabled: undefined,
-                  sweepSpeed: undefined,
-                  autoAssistMs: undefined,
-                })
-              }
-              className="mt-3 text-sm px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded"
-            >
-              Reset to class defaults
-            </button>
-          )}
-        </div>
-      )}
+      <div className="border-t border-white/10 p-3 bg-black/30">
+        <PlayerOverrides player={player} onUpdate={onUpdate} columns={4} />
+      </div>
     </li>
   );
 }
+
 
 export function TournamentSetup() {
   const gameMode = useStore((s) => s.gameMode);

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStore } from '../../store';
 import { audioEngine, RADIO_STATIONS } from '../../lib/audio';
 import { AccessibilityPanel } from './AccessibilityPanel';
+import { PlayerOverrides, playerHasOverrides } from './PlayerOverrides';
 
 export function PauseMenu() {
   const isPaused = useStore((s) => s.isPaused);
@@ -19,6 +20,7 @@ export function PauseMenu() {
   const canUndo = useStore((s) => s.history.length > 0);
   const players = useStore((s) => s.players);
   const currentPlayerIndex = useStore((s) => s.currentPlayerIndex);
+  const updatePlayer = useStore((s) => s.updatePlayer);
 
   const [showSettings, setShowSettings] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
@@ -89,11 +91,34 @@ export function PauseMenu() {
         )}
 
         <div className="space-y-6">
+          {/* Per-student settings for whoever is up, so a student who is
+              struggling can be given bumpers mid-game without changing anything
+              for the rest of the class. Takes effect on their next turn. */}
+          {currentPlayer && (
+            <div className="bg-black/40 border border-white/10 rounded-lg p-4">
+              <div className="flex items-baseline justify-between mb-1 gap-2">
+                <span className="text-accent uppercase tracking-[1px] text-[12px] font-bold">
+                  Just for {currentPlayer.name}
+                </span>
+                {playerHasOverrides(currentPlayer) && (
+                  <span className="text-[11px] uppercase tracking-[1px] text-[#00ff00]">custom</span>
+                )}
+              </div>
+              <p className="text-[#9aa] text-sm mb-3">
+                Applies to this student only. Everyone else keeps the class settings.
+              </p>
+              <PlayerOverrides
+                player={currentPlayer}
+                onUpdate={(patch) => updatePlayer(currentPlayer.id, patch)}
+              />
+            </div>
+          )}
+
           <button
             onClick={() => setShowSettings(true)}
             className="w-full bg-white/10 hover:bg-white/20 border-2 border-accent py-3 rounded font-black uppercase tracking-wider transition-colors"
           >
-            Accessibility &amp; Controls
+            Class Settings (everyone)
           </button>
 
           <div className="flex items-center justify-between gap-3">

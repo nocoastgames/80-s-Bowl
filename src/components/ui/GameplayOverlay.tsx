@@ -445,14 +445,26 @@ export function GameplayOverlay() {
       </header>
 
       {currentPlayer && (
-        <div className="absolute top-[100px] right-10 z-10 w-auto opacity-90 transition-opacity max-h-[calc(100vh-140px)] overflow-y-auto custom-scrollbar pr-2">
-          <Scorecard
-            frames={currentFrames}
-            playerName={currentPlayer.name}
-            orientation="vertical"
-            totalFrames={totalFrames}
-            currentFrameIndex={currentFrame}
-          />
+        <div className="absolute top-[100px] right-10 z-10 w-auto max-h-[calc(100vh-140px)] overflow-y-auto custom-scrollbar pr-2 flex flex-col items-stretch gap-2 pointer-events-auto">
+          <div className="opacity-90 transition-opacity">
+            <Scorecard
+              frames={currentFrames}
+              playerName={currentPlayer.name}
+              orientation="vertical"
+              totalFrames={totalFrames}
+              currentFrameIndex={currentFrame}
+            />
+          </div>
+
+          {/* Undo sits with the scorecard: it's the thing you look at when you
+              notice a roll went down wrong, and it's reachable without pausing. */}
+          <button
+            onClick={undoLastRoll}
+            disabled={!canUndo}
+            className="w-full px-3 py-2 bg-black/80 border-2 border-accent/40 hover:border-accent hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-black/80 disabled:hover:border-accent/40 rounded-lg font-bold uppercase tracking-wider text-sm transition-colors"
+          >
+            Undo Roll
+          </button>
         </div>
       )}
 
@@ -517,23 +529,15 @@ export function GameplayOverlay() {
                 )}
               </div>
 
-              <div className="flex items-center gap-3">
-                {canUndo && (
-                  <button
-                    onClick={undoLastRoll}
-                    className="px-5 py-3 bg-white/10 hover:bg-white/20 border border-white/30 rounded font-bold uppercase tracking-wider transition-colors pointer-events-auto"
-                  >
-                    Undo Roll
-                  </button>
-                )}
-                <button
-                  onClick={nextPlayer}
-                  autoFocus
-                  className="bg-warn text-black px-8 py-4 rounded font-black text-2xl uppercase tracking-wider hover:bg-white transition-colors shadow-[0_0_20px_rgba(255,255,0,0.4)] pointer-events-auto"
-                >
-                  {isLastTurnOfGame ? 'Finish Game' : 'Next Player'}
-                </button>
-              </div>
+              {/* Undo lives under the scorecard now, so this bar stays a single
+                  unambiguous action. */}
+              <button
+                onClick={nextPlayer}
+                autoFocus
+                className="bg-warn text-black px-8 py-4 rounded font-black text-2xl uppercase tracking-wider hover:bg-white transition-colors shadow-[0_0_20px_rgba(255,255,0,0.4)] pointer-events-auto"
+              >
+                {isLastTurnOfGame ? 'Finish Game' : 'Next Player'}
+              </button>
             </div>
           </div>
         )}

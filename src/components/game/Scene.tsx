@@ -347,6 +347,7 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
         playState,
         rollTimer: +rollTimer.current.toFixed(2),
         wasGutter: wasGutter.current,
+        bumpersActive: getActiveSettings().bumpers,
         ball: bp ? bp.map((n) => +n.toFixed(2)) : null,
         ballSpeed: +(ballRef.current?.getSpeed() ?? -1).toFixed(2),
         aimAngle: +useStore.getState().aimAngle.toFixed(3),
