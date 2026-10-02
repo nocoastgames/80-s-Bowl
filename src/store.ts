@@ -175,6 +175,9 @@ interface BowlingStore {
   setBgmVolume: (vol: number) => void;
   sfxVolume: number;
   setSfxVolume: (vol: number) => void;
+  /** Output level for the whole mix; can exceed 1 for quiet rooms. */
+  masterVolume: number;
+  setMasterVolume: (vol: number) => void;
   currentStationIndex: number;
   setCurrentStationIndex: (index: number) => void;
 
@@ -294,6 +297,8 @@ export const useStore = create<BowlingStore>((set, get) => ({
   setBgmVolume: (vol) => set({ bgmVolume: vol }),
   sfxVolume: pick('sfxVolume', 0.8),
   setSfxVolume: (vol) => set({ sfxVolume: vol }),
+  masterVolume: pick('masterVolume', 1),
+  setMasterVolume: (vol) => set({ masterVolume: vol }),
   currentStationIndex: pick('currentStationIndex', 0),
   setCurrentStationIndex: (index: number) => set({ currentStationIndex: index }),
 
@@ -556,6 +561,7 @@ useStore.subscribe((state) => {
       reduceMotion: state.reduceMotion,
       bgmVolume: state.bgmVolume,
       sfxVolume: state.sfxVolume,
+      masterVolume: state.masterVolume,
       currentStationIndex: state.currentStationIndex,
     });
   }, 400);

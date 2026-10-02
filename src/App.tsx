@@ -26,12 +26,24 @@ export default function App() {
   const gameState = useStore((state) => state.gameState);
   const setPaused = useStore((state) => state.setPaused);
   const reduceMotion = useStore((state) => state.reduceMotion);
+  const masterVolume = useStore((state) => state.masterVolume);
+  const bgmVolume = useStore((state) => state.bgmVolume);
+  const sfxVolume = useStore((state) => state.sfxVolume);
 
   // Drive the reduced-motion CSS from a class on <html> so plain CSS
   // animations can be switched off alongside the React-driven ones.
   useEffect(() => {
     document.documentElement.classList.toggle('reduce-motion', reduceMotion);
   }, [reduceMotion]);
+
+  // Push saved levels into the audio engine. Without this the sliders only took
+  // effect when dragged, so a volume saved on a previous day was shown in the
+  // menu but never actually applied.
+  useEffect(() => {
+    audioEngine.setMasterVolume(masterVolume);
+    audioEngine.setBgmVolume(bgmVolume);
+    audioEngine.setSfxVolume(sfxVolume);
+  }, [masterVolume, bgmVolume, sfxVolume]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

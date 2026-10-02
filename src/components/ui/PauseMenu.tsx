@@ -10,6 +10,8 @@ export function PauseMenu() {
   const bgmVolume = useStore((s) => s.bgmVolume);
   const setBgmVolume = useStore((s) => s.setBgmVolume);
   const sfxVolume = useStore((s) => s.sfxVolume);
+  const masterVolume = useStore((s) => s.masterVolume);
+  const setMasterVolume = useStore((s) => s.setMasterVolume);
   const setSfxVolume = useStore((s) => s.setSfxVolume);
   const triggerPinReset = useStore((s) => s.triggerPinReset);
   const resetGame = useStore((s) => s.resetGame);
@@ -49,6 +51,12 @@ export function PauseMenu() {
     const val = parseFloat(e.target.value);
     setBgmVolume(val);
     audioEngine.setBgmVolume(val);
+  };
+
+  const handleMasterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setMasterVolume(val);
+    audioEngine.setMasterVolume(val);
   };
 
   const handleSfxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -174,6 +182,33 @@ export function PauseMenu() {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Master goes to 300%: a classroom smart board or projector can be
+              far quieter than a laptop, and at full board volume there was
+              nowhere left to go. A limiter on the output keeps the loud moments
+              from distorting when it's pushed up. */}
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <label htmlFor="master-vol" className="text-xl font-bold">Overall Volume</label>
+              <span className={masterVolume > 1 ? 'text-warn' : 'text-accent'}>
+                {Math.round(masterVolume * 100)}%
+              </span>
+            </div>
+            <input
+              id="master-vol"
+              type="range"
+              min="0"
+              max="3"
+              step="0.1"
+              value={masterVolume}
+              onChange={handleMasterChange}
+              className="w-full accent-accent"
+            />
+            <p className="text-[#888] text-sm">
+              Turn this up for a smart board or projector. Above 100% boosts past
+              the device&rsquo;s own maximum.
+            </p>
           </div>
 
           <div className="space-y-2">

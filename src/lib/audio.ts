@@ -1,14 +1,50 @@
-export const RADIO_STATIONS = [
-  { id: 'u80s', name: 'Underground 80s', url: 'https://ice1.somafm.com/u80s-128-mp3' },
-  { id: 'poptron', name: 'PopTron', url: 'https://ice1.somafm.com/poptron-128-mp3' },
-  { id: 'groovesalad', name: 'Groove Salad', url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
-  { id: 'secretagent', name: 'Secret Agent', url: 'https://ice1.somafm.com/secretagent-128-mp3' },
-  { id: 'defcon', name: 'DEF CON Radio', url: 'https://ice1.somafm.com/defcon-128-mp3' },
-  { id: 'spacestation', name: 'Space Station', url: 'https://ice1.somafm.com/spacestation-128-mp3' },
-  { id: 'fluid', name: 'Fluid', url: 'https://ice1.somafm.com/fluid-128-mp3' },
-  { id: 'dronezone', name: 'Drone Zone', url: 'https://ice1.somafm.com/dronezone-128-mp3' },
-  { id: 'lush', name: 'Lush', url: 'https://ice1.somafm.com/lush-128-mp3' }
+/**
+ * SomaFM stations.
+ *
+ * `playlist` is the authority. SomaFM retired its MP3 mounts in favour of AAC,
+ * which silently killed every station here: the hardcoded `<id>-128-mp3` URLs
+ * 404, while the song-title endpoint kept working, so the display showed a
+ * track that was never playing. Reading the .pls at play time means a future
+ * mount rename fixes itself. `fallbacks` cover the playlist fetch failing.
+ */
+export interface RadioStation {
+  id: string;
+  name: string;
+  playlist: string;
+  fallbacks: string[];
+}
+
+const somaStation = (id: string, name: string, playlistId = id): RadioStation => ({
+  id,
+  name,
+  playlist: `https://api.somafm.com/${playlistId}130.pls`,
+  fallbacks: [
+    `https://ice6.somafm.com/${id}-128-aac`,
+    `https://ice2.somafm.com/${id}-128-aac`,
+    `https://ice1.somafm.com/${id}-128-aac`,
+  ],
+});
+
+export const RADIO_STATIONS: RadioStation[] = [
+  somaStation('u80s', 'Underground 80s'),
+  somaStation('poptron', 'PopTron'),
+  somaStation('groovesalad', 'Groove Salad'),
+  somaStation('secretagent', 'Secret Agent'),
+  somaStation('defcon', 'DEF CON Radio'),
+  somaStation('spacestation', 'Space Station'),
+  somaStation('fluid', 'Fluid'),
+  somaStation('dronezone', 'Drone Zone'),
+  somaStation('lush', 'Lush'),
 ];
+
+/** Parse the File1=, File2= ... lines out of a PLS playlist, in order. */
+function parsePls(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.match(/^File\d+\s*=\s*(\S+)/i))
+    .filter((m): m is RegExpMatchArray => !!m)
+    .map((m) => m[1]);
+}
 
 class RetroAudioEngine {
   ctx: AudioContext | null = null;
@@ -18,10 +54,23 @@ class RetroAudioEngine {
   
   bgmAudio: HTMLAudioElement | null = null;
   sfxVolume = 0.8;
+  bgmVolume = 0.5;
+  masterVolume = 1;
+  currentStationId: string | null = null;
 
   analyser: AnalyserNode | null = null;
   bgmSource: MediaElementAudioSourceNode | null = null;
+  bgmGain: GainNode | null = null;
   freqData: Uint8Array | null = null;
+
+  /** Everything goes through here, so the whole mix can be lifted at once. */
+  master: GainNode | null = null;
+  limiter: DynamicsCompressorNode | null = null;
+
+  /** Which station we're loading, so a slow stream can't override a newer pick. */
+  private loadToken = 0;
+  /** Last station that failed every URL, for the UI to report. */
+  stationFailed = false;
 
   stations = RADIO_STATIONS;
 
@@ -32,6 +81,40 @@ class RetroAudioEngine {
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+    this.ensureMaster();
+  }
+
+  /**
+   * Master bus: everything into a gain stage, then a limiter, then out.
+   *
+   * Classroom smart boards and projectors are often far quieter than a laptop,
+   * and every sound here was written conservatively straight to the
+   * destination, so with the board at full volume there was nowhere left to go.
+   * The limiter means the gain can be pushed past 1 for those rooms without the
+   * loud moments — a strike, the roll rumble — turning to distortion.
+   */
+  private ensureMaster() {
+    if (!this.ctx || this.master) return;
+    const ctx = this.ctx;
+
+    this.limiter = ctx.createDynamicsCompressor();
+    this.limiter.threshold.value = -6;
+    this.limiter.knee.value = 0;
+    this.limiter.ratio.value = 20;
+    this.limiter.attack.value = 0.003;
+    this.limiter.release.value = 0.25;
+
+    this.master = ctx.createGain();
+    this.master.gain.value = 1;
+
+    this.master.connect(this.limiter);
+    this.limiter.connect(ctx.destination);
+  }
+
+  /** Where every sound should connect instead of ctx.destination. */
+  private out(): AudioNode {
+    this.ensureMaster();
+    return this.master ?? this.ctx!.destination;
   }
 
   getEQData() {
@@ -42,64 +125,152 @@ class RetroAudioEngine {
     return null;
   }
 
+  /**
+   * Music level. Applied on a gain node rather than the element's own volume,
+   * which is capped at 1 — the gain node can go past that for a quiet room.
+   */
   setBgmVolume(vol: number) {
-    if (this.bgmAudio) {
-      this.bgmAudio.volume = vol;
+    this.bgmVolume = vol;
+    if (this.bgmGain && this.ctx) {
+      this.bgmGain.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.02);
     }
+    if (this.bgmAudio) this.bgmAudio.volume = 1;
   }
 
   setSfxVolume(vol: number) {
     this.sfxVolume = vol;
   }
 
-  playBGM(stationIndex: number = 0) {
+  /** Overall output level, applied after everything else. */
+  setMasterVolume(vol: number) {
+    this.masterVolume = vol;
+    this.ensureMaster();
+    if (this.master && this.ctx) {
+      this.master.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.02);
+    }
+  }
+
+  private ensureBgmElement() {
+    if (this.bgmAudio) return;
+
+    this.bgmAudio = new Audio();
+    this.bgmAudio.crossOrigin = 'anonymous';
+    this.bgmAudio.loop = true;
+    this.bgmAudio.volume = 1;
+    this.bgmAudio.preload = 'none';
+
+    this.init();
+    if (!this.ctx) return;
+
+    if (!this.analyser) {
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 64; // 32 bins
+      this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+    }
+    if (!this.bgmGain) {
+      this.bgmGain = this.ctx.createGain();
+      this.bgmGain.gain.value = this.bgmVolume;
+    }
+    if (!this.bgmSource) {
+      try {
+        this.bgmSource = this.ctx.createMediaElementSource(this.bgmAudio);
+        this.bgmSource.connect(this.bgmGain);
+        this.bgmGain.connect(this.analyser);
+        this.analyser.connect(this.out());
+      } catch (e) {
+        console.warn('Could not create audio node:', e);
+      }
+    }
+  }
+
+  /**
+   * Resolve a station to a stream URL that actually loads.
+   *
+   * Reads the station's .pls for the current mounts and falls back to the
+   * known AAC hosts if that fetch fails. Each candidate is tried in turn, so a
+   * single dead edge node doesn't take the station down.
+   */
+  private async resolveStreamUrls(station: RadioStation): Promise<string[]> {
+    try {
+      const res = await fetch(station.playlist, { cache: 'no-store' });
+      if (res.ok) {
+        const urls = parsePls(await res.text());
+        if (urls.length) return [...urls, ...station.fallbacks];
+      }
+    } catch {
+      /* offline, blocked, or CORS — fall through to the known hosts */
+    }
+    return station.fallbacks;
+  }
+
+  /** Load a URL into the element and resolve once it plays, or reject. */
+  private tryStream(url: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const audio = this.bgmAudio;
+      if (!audio) return reject(new Error('no element'));
+
+      const cleanup = () => {
+        audio.removeEventListener('canplay', onOk);
+        audio.removeEventListener('error', onErr);
+        clearTimeout(timer);
+      };
+      const onOk = () => { cleanup(); resolve(); };
+      const onErr = () => { cleanup(); reject(new Error(`cannot play ${url}`)); };
+      const timer = setTimeout(() => { cleanup(); reject(new Error(`timeout ${url}`)); }, 8000);
+
+      audio.addEventListener('canplay', onOk);
+      audio.addEventListener('error', onErr);
+      audio.src = url;
+      audio.load();
+    });
+  }
+
+  async playBGM(stationIndex: number = 0) {
     if (stationIndex === -1) {
       this.stopBGM();
       return;
     }
-    
-    if (this.isPlayingBgm && this.bgmAudio?.src === this.stations[stationIndex]?.url) return;
-    
-    // Changing station or initiating
-    this.isPlayingBgm = true;
+    const station = this.stations[stationIndex];
+    if (!station) return;
 
-    if (!this.bgmAudio) {
-      this.bgmAudio = new Audio();
-      this.bgmAudio.crossOrigin = 'anonymous';
-      this.bgmAudio.loop = true;
-      // Default initial volume before store overrides
-      this.bgmAudio.volume = 0.25; 
-      
-      this.init(); // ensure ctx exists
-      if (this.ctx) {
-        if (!this.analyser) {
-          this.analyser = this.ctx.createAnalyser();
-          this.analyser.fftSize = 64; // 32 bins
-          this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
-        }
-        if (!this.bgmSource) {
-          try {
-            this.bgmSource = this.ctx.createMediaElementSource(this.bgmAudio);
-            this.bgmSource.connect(this.analyser);
-            this.analyser.connect(this.ctx.destination);
-          } catch(e) {
-            console.warn("Could not create audio node:", e);
-          }
-        }
+    // Already playing this station — don't restart it mid-track.
+    if (this.isPlayingBgm && this.currentStationId === station.id) return;
+
+    const token = ++this.loadToken;
+    this.currentStationId = station.id;
+    this.stationFailed = false;
+    this.ensureBgmElement();
+    if (!this.bgmAudio) return;
+
+    const urls = await this.resolveStreamUrls(station);
+
+    for (const url of urls) {
+      if (token !== this.loadToken) return; // a newer station was picked
+      try {
+        await this.tryStream(url);
+        if (token !== this.loadToken) return;
+        await this.bgmAudio.play();
+        this.isPlayingBgm = true;
+        this.stationFailed = false;
+        return;
+      } catch {
+        /* try the next mount */
       }
     }
-    
-    if (this.stations[stationIndex]) {
-      this.bgmAudio.src = this.stations[stationIndex].url;
-      
-      this.bgmAudio.play().catch(e => {
-          console.warn("BGM play failed", e);
-          this.isPlayingBgm = false;
-      });
-    }
+
+    if (token !== this.loadToken) return;
+    // Every candidate failed. Say so rather than sitting silent with a track
+    // title on screen, which is exactly how the dead MP3 mounts went unnoticed.
+    this.isPlayingBgm = false;
+    this.stationFailed = true;
+    console.warn(`Station "${station.name}" could not be played; tried`, urls);
   }
 
   stopBGM() {
+    // Cancel any station still resolving, or it would start playing after this.
+    this.loadToken++;
+    this.currentStationId = null;
+    this.stationFailed = false;
     if (!this.bgmAudio) return;
     this.bgmAudio.pause();
     this.isPlayingBgm = false;
@@ -134,7 +305,7 @@ class RetroAudioEngine {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.out());
 
     osc.start(time);
     osc.stop(time + duration);
@@ -166,7 +337,7 @@ class RetroAudioEngine {
 
     this.rollSource.connect(filter);
     filter.connect(this.rollGain);
-    this.rollGain.connect(ctx.destination);
+    this.rollGain.connect(this.out());
 
     this.rollSource.start();
   }
@@ -200,7 +371,7 @@ class RetroAudioEngine {
     gain.gain.exponentialRampToValueAtTime(0.01 * this.sfxVolume, ctx.currentTime + 0.3);
 
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.out());
     osc.start();
     osc.stop(ctx.currentTime + 0.3);
 
@@ -224,7 +395,7 @@ class RetroAudioEngine {
 
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(this.out());
     noise.start();
   }
 
@@ -263,7 +434,7 @@ class RetroAudioEngine {
 
     noise.connect(bandpass);
     bandpass.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(this.out());
     noise.start(now);
 
     // Synth tone riding along with it.
@@ -284,7 +455,7 @@ class RetroAudioEngine {
 
     osc.connect(oscFilter);
     oscFilter.connect(oscGain);
-    oscGain.connect(ctx.destination);
+    oscGain.connect(this.out());
     osc.start(now);
     osc.stop(now + dur);
   }
@@ -308,7 +479,7 @@ class RetroAudioEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
 
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.out());
     osc.start();
     osc.stop(ctx.currentTime + 0.22);
   }
@@ -329,7 +500,7 @@ class RetroAudioEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
 
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.out());
     osc.start();
     osc.stop(ctx.currentTime + 0.5);
   }
@@ -369,7 +540,7 @@ class RetroAudioEngine {
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.out());
       osc.start(t);
       osc.stop(t + 0.32);
     });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { RADIO_STATIONS } from '../lib/audio';
+import { RADIO_STATIONS, audioEngine } from '../lib/audio';
 
 export function useCurrentSong(stationIndex: number) {
   const [songText, setSongText] = useState('Loading...');
@@ -15,6 +15,15 @@ export function useCurrentSong(stationIndex: number) {
     let timeoutId: number;
 
     const fetchSong = async () => {
+      // The song endpoint and the stream are separate services. When SomaFM
+      // retired its MP3 mounts this kept returning titles for a station that
+      // wasn't playing a note, which is why the breakage went unnoticed. Say
+      // when the audio isn't actually running.
+      if (audioEngine.stationFailed) {
+        setSongText('STATION UNAVAILABLE');
+        if (isMounted) timeoutId = window.setTimeout(fetchSong, 5000);
+        return;
+      }
       try {
         // SomaFM API does not have CORS headers by default for some endpoints, 
         // but let's try direct fetch. If it fails, fallback to station name.

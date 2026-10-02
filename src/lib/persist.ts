@@ -23,6 +23,7 @@ export interface PersistedSettings {
   reduceMotion: boolean;
   bgmVolume: number;
   sfxVolume: number;
+  masterVolume: number;
   currentStationIndex: number;
 }
 
