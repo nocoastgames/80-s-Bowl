@@ -29,6 +29,7 @@ export default function App() {
   const masterVolume = useStore((state) => state.masterVolume);
   const bgmVolume = useStore((state) => state.bgmVolume);
   const sfxVolume = useStore((state) => state.sfxVolume);
+  const currentStationIndex = useStore((state) => state.currentStationIndex);
 
   // Drive the reduced-motion CSS from a class on <html> so plain CSS
   // animations can be switched off alongside the React-driven ones.
@@ -44,6 +45,14 @@ export default function App() {
     audioEngine.setBgmVolume(bgmVolume);
     audioEngine.setSfxVolume(sfxVolume);
   }, [masterVolume, bgmVolume, sfxVolume]);
+
+  // Work out the selected station's real stream URLs ahead of time. Resolving
+  // them during the switch press would put a network round trip between the
+  // press and the music, which spends the user activation browsers require
+  // before they will start audio.
+  useEffect(() => {
+    if (currentStationIndex >= 0) audioEngine.prefetchStation(currentStationIndex);
+  }, [currentStationIndex]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
