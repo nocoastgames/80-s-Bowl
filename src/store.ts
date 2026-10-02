@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
+import type { MusicStation, MusicTrack } from './lib/music';
 import {
   loadSettings,
   saveSettings,
@@ -179,6 +180,12 @@ interface BowlingStore {
   masterVolume: number;
   setMasterVolume: (vol: number) => void;
   currentStationIndex: number;
+  /** Playlists loaded from public/music/tracks.json. */
+  musicStations: MusicStation[];
+  setMusicStations: (stations: MusicStation[]) => void;
+  /** Track currently playing, for the FM display and credits. */
+  nowPlaying: MusicTrack | null;
+  setNowPlaying: (track: MusicTrack | null) => void;
   setCurrentStationIndex: (index: number) => void;
 
   history: HistoryEntry[];
@@ -300,6 +307,10 @@ export const useStore = create<BowlingStore>((set, get) => ({
   masterVolume: pick('masterVolume', 1),
   setMasterVolume: (vol) => set({ masterVolume: vol }),
   currentStationIndex: pick('currentStationIndex', 0),
+  musicStations: [],
+  setMusicStations: (stations) => set({ musicStations: stations }),
+  nowPlaying: null,
+  setNowPlaying: (track) => set({ nowPlaying: track }),
   setCurrentStationIndex: (index: number) => set({ currentStationIndex: index }),
 
   history: [],

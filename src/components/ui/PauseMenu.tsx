@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../../store';
-import { audioEngine, RADIO_STATIONS } from '../../lib/audio';
+import { audioEngine } from '../../lib/audio';
 import { AccessibilityPanel } from './AccessibilityPanel';
 import { PlayerOverrides, playerHasOverrides } from './PlayerOverrides';
 
@@ -17,6 +17,7 @@ export function PauseMenu() {
   const resetGame = useStore((s) => s.resetGame);
   const nextPlayer = useStore((s) => s.nextPlayer);
   const currentStationIndex = useStore((s) => s.currentStationIndex);
+  const musicStations = useStore((s) => s.musicStations);
   const setCurrentStationIndex = useStore((s) => s.setCurrentStationIndex);
   const undoLastRoll = useStore((s) => s.undoLastRoll);
   const canUndo = useStore((s) => s.history.length > 0);
@@ -26,6 +27,7 @@ export function PauseMenu() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
 
   if (!isPaused) return null;
 
@@ -176,12 +178,75 @@ export function PauseMenu() {
               className="w-full bg-bg-dark border border-white/20 rounded px-4 py-2 text-lg focus:border-accent focus:outline-none"
             >
               <option value={-1}>0. OFF</option>
-              {RADIO_STATIONS.map((station, i) => (
+              {musicStations.map((station, i) => (
                 <option key={i} value={i}>
                   {i + 1}. {station.name}
                 </option>
               ))}
             </select>
+
+            {musicStations.length === 0 ? (
+              <p className="text-[#888] text-sm">
+                No music added yet. Drop audio files into the game&rsquo;s
+                <code className="text-accent"> public/music </code> folder and list
+                them in <code className="text-accent">tracks.json</code>; the README
+                in that folder explains how.
+              </p>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => audioEngine.nextTrack()}
+                    disabled={currentStationIndex === -1}
+                    className="flex-1 px-3 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-40 rounded font-bold text-sm uppercase tracking-wider transition-colors"
+                  >
+                    Skip Track
+                  </button>
+                  <button
+                    onClick={() => setShowCredits((v) => !v)}
+                    className="flex-1 px-3 py-2 bg-white/10 hover:bg-white/20 rounded font-bold text-sm uppercase tracking-wider transition-colors"
+                  >
+                    {showCredits ? 'Hide Credits' : 'Music Credits'}
+                  </button>
+                </div>
+
+                {/* Most Creative Commons licences require naming the artist and
+                    the licence. The scrolling display credits whatever is
+                    playing; this lists everything in one place. */}
+                {showCredits && (
+                  <div className="bg-black/40 border border-white/10 rounded-lg p-3 max-h-56 overflow-y-auto custom-scrollbar">
+                    {musicStations.map((station) => (
+                      <div key={station.name} className="mb-3 last:mb-0">
+                        <p className="text-accent uppercase tracking-[1px] text-[11px] font-bold mb-1">
+                          {station.name}
+                        </p>
+                        <ul className="space-y-1">
+                          {station.tracks.map((t) => (
+                            <li key={t.file} className="text-sm text-[#ccc] leading-snug">
+                              <span className="text-white">{t.artist}</span> &mdash; {t.title}
+                              {t.license && <span className="text-[#888]"> ({t.license})</span>}
+                              {t.url && (
+                                <>
+                                  {' '}
+                                  <a
+                                    href={t.url}
+                                    target="_blank"
+                                    rel="noreferrer noopener"
+                                    className="text-accent underline"
+                                  >
+                                    source
+                                  </a>
+                                </>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Master goes to 300%: a classroom smart board or projector can be

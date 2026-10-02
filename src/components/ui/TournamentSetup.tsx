@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore, type Player } from '../../store';
-import { RADIO_STATIONS, audioEngine } from '../../lib/audio';
+import { audioEngine } from '../../lib/audio';
 import { AccessibilityPanel } from './AccessibilityPanel';
 import { loadRosters, saveRoster, deleteRoster, type SavedRoster } from '../../lib/persist';
 import { PlayerOverrides, playerHasOverrides } from './PlayerOverrides';
@@ -60,6 +60,7 @@ export function TournamentSetup() {
   const totalFrames = useStore((s) => s.totalFrames);
   const setTotalFrames = useStore((s) => s.setTotalFrames);
   const currentStationIndex = useStore((s) => s.currentStationIndex);
+  const musicStations = useStore((s) => s.musicStations);
   const setCurrentStationIndex = useStore((s) => s.setCurrentStationIndex);
 
   const [name, setName] = useState('');
@@ -206,15 +207,16 @@ export function TournamentSetup() {
                 className="bg-bg-dark border border-white/20 rounded px-4 py-2 text-lg focus:border-accent focus:outline-none"
               >
                 <option value={-1}>0. OFF</option>
-                {RADIO_STATIONS.map((station, i) => (
+                {musicStations.map((station, i) => (
                   <option key={i} value={i}>
                     {i + 1}. {station.name}
                   </option>
                 ))}
               </select>
               <p className="text-[#888] text-sm">
-                Streams come from somafm.com. If your network blocks them the game still
-                works &mdash; the sound effects are generated locally.
+                Music is bundled with the game, so it works offline and on a filtered
+                network. Add your own in the <code className="text-accent">public/music</code>{' '}
+                folder. Sound effects are generated locally either way.
               </p>
             </div>
 

@@ -89,8 +89,25 @@ Type checking:
 npm run lint
 ```
 
-## Notes
+## Music
 
-Background music streams from [SomaFM](https://somafm.com). If a school network
-blocks it, the game is unaffected — all sound effects are generated locally with
-the Web Audio API.
+Music ships with the game rather than streaming. Audio files go in
+`public/music/`, listed in `public/music/tracks.json`; `public/music/README.txt`
+explains the format. Each station is a playlist, selected with the 1–9 keys or
+the station dropdown.
+
+This replaced an internet radio integration. The station operator's terms state
+their streams are "not for use in video games", and they enforce that with a
+403 — so every station had silently stopped playing. Bundled files avoid both
+that and the school network's filtering, work offline, and let the EQ display
+work again, since same-origin audio isn't CORS-restricted.
+
+Only add music you're licensed to use. [Free Music
+Archive](https://freemusicarchive.org) is a good source; check the licence on
+each individual track, as they vary per upload. Most Creative Commons licences
+require crediting the artist, which the game does automatically: the artist and
+title scroll on the FM display while a track plays, and the pause menu has a
+Music Credits list showing each track's licence and source link.
+
+Sound effects are generated locally with the Web Audio API and need no files at
+all.

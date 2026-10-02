@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, calculateTotalScore, useActiveSettings } from '../../store';
 import { useSingleSwitch } from '../../hooks/useSingleSwitch';
 import { useAutoAssist } from '../../hooks/useAutoAssist';
-import { useCurrentSong } from '../../hooks/useCurrentSong';
 import { motion } from 'motion/react';
-import { audioEngine, RADIO_STATIONS } from '../../lib/audio';
+import { audioEngine } from '../../lib/audio';
 import { sweep, resetSweep } from '../../lib/sweep';
 import { Scorecard } from './Scorecard';
 
@@ -127,6 +126,8 @@ export function GameplayOverlay() {
   const canUndo = useStore((s) => s.history.length > 0);
   const isPaused = useStore((s) => s.isPaused);
   const currentStationIndex = useStore((s) => s.currentStationIndex);
+  const musicStations = useStore((s) => s.musicStations);
+  const nowPlaying = useStore((s) => s.nowPlaying);
   const reduceMotion = useStore((s) => s.reduceMotion);
   const switchHoldMs = useStore((s) => s.switchHoldMs);
   const switchCooldownMs = useStore((s) => s.switchCooldownMs);
@@ -309,9 +310,15 @@ export function GameplayOverlay() {
     return () => clearTimeout(timer);
   }, [teacherAdvancePending, advanceReady]);
 
-  const stationName = currentStationIndex === -1 ? 'OFF' : RADIO_STATIONS[currentStationIndex]?.name || 'OFF';
+  const stationName = currentStationIndex === -1 ? 'OFF' : musicStations[currentStationIndex]?.name || 'OFF';
   const isAudioActive = !isPaused && currentStationIndex !== -1 && audioEngine.isPlayingBgm;
-  const songText = useCurrentSong(currentStationIndex);
+  // Artist first: most of these tracks are CC-BY, which requires crediting the
+  // artist, and scrolling it here is how that gets done while the track plays.
+  const songText = nowPlaying
+    ? `${nowPlaying.artist} — ${nowPlaying.title}`
+    : musicStations.length === 0
+      ? 'NO MUSIC ADDED'
+      : '';
 
   const [eqOpacity, setEqOpacity] = useState(1);
   const opacityTimeoutRef = useRef<number | undefined>(undefined);

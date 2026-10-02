@@ -350,9 +350,8 @@ function GameController({ ballRef, pinRefs }: { ballRef: React.RefObject<BallRef
         bumpersActive: getActiveSettings().bumpers,
         audio: {
           playing: audioEngine.isPlayingBgm,
+          track: audioEngine.nowPlaying?.file ?? null,
           failed: audioEngine.stationFailed,
-          noCorsFallback: audioEngine.usingFallbackAudio,
-          errors: audioEngine.lastStationErrors,
         },
         ball: bp ? bp.map((n) => +n.toFixed(2)) : null,
         ballSpeed: +(ballRef.current?.getSpeed() ?? -1).toFixed(2),

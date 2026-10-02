@@ -29,7 +29,6 @@ export default function App() {
   const masterVolume = useStore((state) => state.masterVolume);
   const bgmVolume = useStore((state) => state.bgmVolume);
   const sfxVolume = useStore((state) => state.sfxVolume);
-  const currentStationIndex = useStore((state) => state.currentStationIndex);
 
   // Drive the reduced-motion CSS from a class on <html> so plain CSS
   // animations can be switched off alongside the React-driven ones.
@@ -46,13 +45,24 @@ export default function App() {
     audioEngine.setSfxVolume(sfxVolume);
   }, [masterVolume, bgmVolume, sfxVolume]);
 
-  // Work out the selected station's real stream URLs ahead of time. Resolving
-  // them during the switch press would put a network round trip between the
-  // press and the music, which spends the user activation browsers require
-  // before they will start audio.
+  // Load the bundled playlists once, and keep the FM display following the
+  // track. Both live here rather than in the overlay so the station list is
+  // ready before anyone reaches the setup screen.
   useEffect(() => {
-    if (currentStationIndex >= 0) audioEngine.prefetchStation(currentStationIndex);
-  }, [currentStationIndex]);
+    const setMusicStations = useStore.getState().setMusicStations;
+    const setNowPlaying = useStore.getState().setNowPlaying;
+
+    audioEngine.onTrackChange = setNowPlaying;
+    audioEngine.loadMusic().then((stations) => {
+      setMusicStations(stations);
+      // A saved station index can point past the end of a shorter list after
+      // tracks.json is edited, which would otherwise select nothing silently.
+      const { currentStationIndex: saved, setCurrentStationIndex } = useStore.getState();
+      if (saved >= stations.length) setCurrentStationIndex(stations.length ? 0 : -1);
+    });
+
+    return () => { audioEngine.onTrackChange = null; };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

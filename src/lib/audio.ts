@@ -1,50 +1,7 @@
-/**
- * SomaFM stations.
- *
- * `playlist` is the authority. SomaFM retired its MP3 mounts in favour of AAC,
- * which silently killed every station here: the hardcoded `<id>-128-mp3` URLs
- * 404, while the song-title endpoint kept working, so the display showed a
- * track that was never playing. Reading the .pls at play time means a future
- * mount rename fixes itself. `fallbacks` cover the playlist fetch failing.
- */
-export interface RadioStation {
-  id: string;
-  name: string;
-  playlist: string;
-  fallbacks: string[];
-}
+import { loadMusicManifest, musicUrl, type MusicStation, type MusicTrack } from './music';
 
-const somaStation = (id: string, name: string, playlistId = id): RadioStation => ({
-  id,
-  name,
-  playlist: `https://api.somafm.com/${playlistId}130.pls`,
-  fallbacks: [
-    `https://ice6.somafm.com/${id}-128-aac`,
-    `https://ice2.somafm.com/${id}-128-aac`,
-    `https://ice1.somafm.com/${id}-128-aac`,
-  ],
-});
+export type { MusicStation, MusicTrack };
 
-export const RADIO_STATIONS: RadioStation[] = [
-  somaStation('u80s', 'Underground 80s'),
-  somaStation('poptron', 'PopTron'),
-  somaStation('groovesalad', 'Groove Salad'),
-  somaStation('secretagent', 'Secret Agent'),
-  somaStation('defcon', 'DEF CON Radio'),
-  somaStation('spacestation', 'Space Station'),
-  somaStation('fluid', 'Fluid'),
-  somaStation('dronezone', 'Drone Zone'),
-  somaStation('lush', 'Lush'),
-];
-
-/** Parse the File1=, File2= ... lines out of a PLS playlist, in order. */
-function parsePls(text: string): string[] {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.match(/^File\d+\s*=\s*(\S+)/i))
-    .filter((m): m is RegExpMatchArray => !!m)
-    .map((m) => m[1]);
-}
 
 class RetroAudioEngine {
   ctx: AudioContext | null = null;
@@ -56,12 +13,6 @@ class RetroAudioEngine {
   sfxVolume = 0.8;
   bgmVolume = 0.5;
   masterVolume = 1;
-  currentStationId: string | null = null;
-  bgmFallbackAudio: HTMLAudioElement | null = null;
-  usingFallbackAudio = false;
-  resolvedUrls = new Map<string, string[]>();
-  lastStationErrors: string[] = [];
-
   analyser: AnalyserNode | null = null;
   bgmSource: MediaElementAudioSourceNode | null = null;
   bgmGain: GainNode | null = null;
@@ -71,12 +22,19 @@ class RetroAudioEngine {
   master: GainNode | null = null;
   limiter: DynamicsCompressorNode | null = null;
 
-  /** Which station we're loading, so a slow stream can't override a newer pick. */
-  private loadToken = 0;
-  /** Last station that failed every URL, for the UI to report. */
+  // --- Bundled music ---
+  stations: MusicStation[] = [];
+  stationIndex = -1;
+  trackIndex = 0;
+  nowPlaying: MusicTrack | null = null;
+  /** Set by the app so the FM display can follow the track. */
+  onTrackChange: ((track: MusicTrack | null) => void) | null = null;
+  /** Set when tracks.json couldn't be read, so the UI can say so. */
+  musicError: string | undefined;
+  /** Station has nothing playable, for the UI to report. */
   stationFailed = false;
-
-  stations = RADIO_STATIONS;
+  /** Consecutive missing files, so a broken station can't loop forever. */
+  private consecutiveFailures = 0;
 
   init() {
     if (!this.ctx) {
@@ -138,11 +96,8 @@ class RetroAudioEngine {
     if (this.bgmGain && this.ctx) {
       this.bgmGain.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.02);
     }
+    // Level lives on the gain node, not the element, so it can exceed 1.
     if (this.bgmAudio) this.bgmAudio.volume = 1;
-    // The no-CORS fallback bypasses the gain nodes, so it carries the level itself.
-    if (this.bgmFallbackAudio) {
-      this.bgmFallbackAudio.volume = Math.min(1, this.bgmVolume * this.masterVolume);
-    }
   }
 
   setSfxVolume(vol: number) {
@@ -162,13 +117,22 @@ class RetroAudioEngine {
     if (this.bgmAudio) return;
 
     this.bgmAudio = new Audio();
-    this.bgmAudio.crossOrigin = 'anonymous';
-    this.bgmAudio.loop = true;
+    // Tracks ship with the game, so these are same-origin: no crossOrigin
+    // needed, nothing for a CORS policy to reject, and the analyser can read
+    // the signal, which is why the EQ works again.
+    this.bgmAudio.loop = false; // the playlist advances instead
     this.bgmAudio.volume = 1;
-    // Not preload="none": the stream has to actually start fetching for
-    // playback to begin. Setting it to none meant load() did nothing, so every
-    // candidate URL sat there until it timed out.
     this.bgmAudio.preload = 'auto';
+
+    this.bgmAudio.addEventListener('ended', () => this.advanceTrack(1));
+    this.bgmAudio.addEventListener('error', () => {
+      // A listed file that isn't actually there. Skip past it rather than
+      // letting one typo in tracks.json silence the whole station.
+      if (this.stationIndex >= 0) {
+        console.warn('Could not play', this.nowPlaying?.file);
+        this.advanceTrack(1);
+      }
+    });
 
     this.init();
     if (!this.ctx) return;
@@ -194,166 +158,105 @@ class RetroAudioEngine {
     }
   }
 
+  /** Read public/music/tracks.json. Safe to call more than once. */
+  async loadMusic(): Promise<MusicStation[]> {
+    const manifest = await loadMusicManifest();
+    this.stations = manifest.stations;
+    this.musicError = manifest.error;
+    return this.stations;
+  }
+
+  /** True when the game has no music to play at all. */
+  get hasMusic(): boolean {
+    return this.stations.length > 0;
+  }
+
+  private setNowPlaying(track: MusicTrack | null) {
+    this.nowPlaying = track;
+    this.onTrackChange?.(track);
+  }
+
   /**
-   * Resolve a station to a stream URL that actually loads.
-   *
-   * Reads the station's .pls for the current mounts and falls back to the
-   * known AAC hosts if that fetch fails. Each candidate is tried in turn, so a
-   * single dead edge node doesn't take the station down.
+   * Move `step` tracks through the current station's playlist, wrapping round.
+   * Guards against a station whose files are all missing: once every track has
+   * failed in a row, stop rather than spinning through them forever.
    */
-  private async resolveStreamUrls(station: RadioStation): Promise<string[]> {
+  private advanceTrack(step: number) {
+    const station = this.stations[this.stationIndex];
+    if (!station || station.tracks.length === 0) return;
+
+    this.consecutiveFailures++;
+    if (this.consecutiveFailures > station.tracks.length) {
+      this.stationFailed = true;
+      this.isPlayingBgm = false;
+      this.setNowPlaying(null);
+      return;
+    }
+
+    this.trackIndex = (this.trackIndex + step + station.tracks.length) % station.tracks.length;
+    void this.playCurrentTrack();
+  }
+
+  private async playCurrentTrack() {
+    const station = this.stations[this.stationIndex];
+    const track = station?.tracks[this.trackIndex];
+    if (!track || !this.bgmAudio) return;
+
+    this.setNowPlaying(track);
+    this.bgmAudio.src = musicUrl(track.file);
     try {
-      const res = await fetch(station.playlist, { cache: 'no-store' });
-      if (res.ok) {
-        const urls = parsePls(await res.text());
-        if (urls.length) return [...urls, ...station.fallbacks];
-      }
+      await this.bgmAudio.play();
+      this.isPlayingBgm = true;
+      this.stationFailed = false;
+      // Reaching playback clears the run of failures the guard counts.
+      this.consecutiveFailures = 0;
     } catch {
-      /* offline, blocked, or CORS — fall through to the known hosts */
+      // Autoplay refusal before any interaction is normal; the next switch
+      // press will start it. A genuinely bad file raises 'error' instead.
+      this.isPlayingBgm = false;
     }
-    return station.fallbacks;
+  }
+
+  /** Skip to the next track, e.g. from a UI button. */
+  nextTrack() {
+    this.consecutiveFailures = 0;
+    this.advanceTrack(1);
   }
 
   /**
-   * Point an element at a URL and actually start it.
-   *
-   * Driven by play() rather than by waiting for a `canplay` event: play()
-   * reports its own failure, and calling it directly keeps the browser's
-   * user-activation window intact, which waiting on an event does not.
+   * Start a station, by index into `stations`. -1 stops the music.
+   * Named playBGM because that is what the rest of the game calls.
    */
-  private tryStream(audio: HTMLAudioElement, url: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      const cleanup = () => {
-        settled = true;
-        audio.removeEventListener('error', onErr);
-        clearTimeout(timer);
-      };
-      const onErr = () => { if (!settled) { cleanup(); reject(new Error(`cannot play ${url}`)); } };
-      const timer = setTimeout(() => { if (!settled) { cleanup(); reject(new Error(`timeout ${url}`)); } }, 6000);
-
-      audio.addEventListener('error', onErr);
-      audio.src = url;
-      audio.play().then(
-        () => { if (!settled) { cleanup(); resolve(); } },
-        (e) => { if (!settled) { cleanup(); reject(e); } }
-      );
-    });
-  }
-
-  /**
-   * Element used when the CORS-enabled one can't play a stream.
-   *
-   * crossOrigin="anonymous" is required to feed the EQ analyser, but if a
-   * stream host doesn't return CORS headers the load fails outright. Music
-   * matters more than the visualiser, so this plays straight to the output
-   * with no analyser and no master bus — a fallback, not the normal path.
-   */
-  private ensureFallbackElement(): HTMLAudioElement {
-    if (!this.bgmFallbackAudio) {
-      this.bgmFallbackAudio = new Audio();
-      this.bgmFallbackAudio.loop = true;
-      this.bgmFallbackAudio.preload = 'auto';
-    }
-    this.bgmFallbackAudio.volume = Math.min(1, this.bgmVolume * this.masterVolume);
-    return this.bgmFallbackAudio;
-  }
-
-  /**
-   * Fetch and cache a station's current stream URLs.
-   *
-   * Called ahead of play so the playlist request isn't sitting between the
-   * student's switch press and the music starting — an await in that gap
-   * spends the user-activation the browser needs to allow playback.
-   */
-  async prefetchStation(stationIndex: number) {
-    const station = this.stations[stationIndex];
-    if (!station || this.resolvedUrls.has(station.id)) return;
-    this.resolvedUrls.set(station.id, await this.resolveStreamUrls(station));
-  }
-
   async playBGM(stationIndex: number = 0) {
-    if (stationIndex === -1) {
+    if (stationIndex === -1 || !this.stations[stationIndex]) {
       this.stopBGM();
       return;
     }
-    const station = this.stations[stationIndex];
-    if (!station) return;
 
-    // Already playing this station — don't restart it mid-track.
-    if (this.isPlayingBgm && this.currentStationId === station.id) return;
+    // Already on this station — don't restart the track mid-play.
+    if (this.isPlayingBgm && this.stationIndex === stationIndex) return;
 
-    const token = ++this.loadToken;
-    this.currentStationId = station.id;
+    const changingStation = this.stationIndex !== stationIndex;
+    this.stationIndex = stationIndex;
     this.stationFailed = false;
-
-    // Silence whatever was going, including the no-CORS fallback — otherwise a
-    // station change that succeeds on the other element leaves two streams
-    // playing over each other.
-    this.bgmFallbackAudio?.pause();
-    this.bgmAudio?.pause();
-
+    this.consecutiveFailures = 0;
     this.ensureBgmElement();
     if (!this.bgmAudio) return;
 
-    // Use cached URLs when we have them so playback starts immediately after
-    // the press; only pay for the playlist fetch the first time.
-    const urls =
-      this.resolvedUrls.get(station.id) ??
-      (await (async () => {
-        const resolved = await this.resolveStreamUrls(station);
-        this.resolvedUrls.set(station.id, resolved);
-        return resolved;
-      })());
-
-    const attempts: string[] = [];
-
-    for (const url of urls) {
-      if (token !== this.loadToken) return; // a newer station was picked
-      try {
-        await this.tryStream(this.bgmAudio, url);
-        if (token !== this.loadToken) return;
-        this.usingFallbackAudio = false;
-        this.isPlayingBgm = true;
-        this.stationFailed = false;
-        return;
-      } catch (e) {
-        attempts.push(`${url} -> ${(e as Error)?.message ?? e}`);
-      }
+    const station = this.stations[stationIndex];
+    if (changingStation) {
+      // Start somewhere random so the same game doesn't open on the same track
+      // every single time.
+      this.trackIndex = Math.floor(Math.random() * station.tracks.length);
     }
-
-    // Last resort: same streams without CORS. Loses the EQ and the master bus,
-    // but a class would rather have music than a visualiser.
-    const fallback = this.ensureFallbackElement();
-    for (const url of urls) {
-      if (token !== this.loadToken) return;
-      try {
-        await this.tryStream(fallback, url);
-        if (token !== this.loadToken) return;
-        this.usingFallbackAudio = true;
-        this.isPlayingBgm = true;
-        this.stationFailed = false;
-        return;
-      } catch (e) {
-        attempts.push(`(no-cors) ${url} -> ${(e as Error)?.message ?? e}`);
-      }
-    }
-
-    if (token !== this.loadToken) return;
-    // Every candidate failed. Say so rather than sitting silent with a track
-    // title on screen, which is exactly how the dead MP3 mounts went unnoticed.
-    this.isPlayingBgm = false;
-    this.stationFailed = true;
-    this.lastStationErrors = attempts;
-    console.warn(`Station "${station.name}" could not be played:\n` + attempts.join('\n'));
+    await this.playCurrentTrack();
   }
 
   stopBGM() {
-    // Cancel any station still resolving, or it would start playing after this.
-    this.loadToken++;
-    this.currentStationId = null;
+    this.stationIndex = -1;
     this.stationFailed = false;
-    if (this.bgmFallbackAudio) this.bgmFallbackAudio.pause();
+    this.consecutiveFailures = 0;
+    this.setNowPlaying(null);
     if (!this.bgmAudio) return;
     this.bgmAudio.pause();
     this.isPlayingBgm = false;
